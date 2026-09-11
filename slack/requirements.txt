@@ -8,3 +8,7 @@ uvicorn>=0.32
 pydantic>=2.9
 python-dotenv>=1.0
 reportlab>=4.0
+# reportlab pulls pillow in transitively, and the range it accepts still
+# resolves to 9.5.0, which Snyk flags with 18 fixable issues - the worst a
+# critical heap-based buffer overflow at CVSS 9.6. Pin the floor ourselves.
+pillow>=11.3.0
