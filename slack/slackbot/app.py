@@ -12,9 +12,36 @@ from .signals import SignalSink
 
 def build(cfg: Config) -> tuple[App, SignalSink]:
     app = App(token=cfg.bot_token, raise_error_for_unhandled_request=False)
-    sink = SignalSink(cfg.signal_log, cfg.signal_webhook, cfg.signal_webhook_token)
+    sink = build_sink(cfg)
     register(app, sink)
     return app, sink
+
+
+def build_sink(cfg: Config) -> SignalSink:
+    """Fixtures by default; the real agent when SLACK_BACKEND is set.
+
+    The fixture path stays available on purpose. If hotdata or the graph is
+    down an hour before the pitch, the surface still demonstrates, and that is
+    worth more than making the wiring mandatory.
+    """
+    if not cfg.backend:
+        print("[sink]   fixtures only - set SLACK_BACKEND=1 to write to the agent")
+        return SignalSink(cfg.signal_log, cfg.signal_webhook, cfg.signal_webhook_token)
+
+    from insight.store import Insight
+    from memory.graph import GraphStore
+
+    from .live import BackendSink
+
+    remember = None
+    try:
+        from memory.remember import Remember
+        remember = Remember()
+    except Exception as exc:
+        print(f"[sink]   Cognee unavailable, continuing without it: {exc}")
+
+    print("[sink]   every click writes through to the agent's memory")
+    return BackendSink(cfg, store=GraphStore(), insight=Insight(), remember=remember)
 
 
 def main() -> None:

@@ -32,7 +32,7 @@ RocketRide / MCP  --POST /digest,/pack,...-->  slackbot  --Signal-->  data/signa
 ## See the UI before you have a Slack app
 
 ```sh
-cd slack && python -m slackbot.preview
+python -m slack.slackbot.preview
 ```
 
 Prints a Block Kit Builder link for each surface. No tokens needed.
@@ -57,23 +57,23 @@ bottom of the About tab → copy the channel ID (`C…`). Invite the bot with
 **4. Fill the env.**
 
 ```sh
-cp .env.example .env   # then paste the two tokens and the channel id
+cp slack/.env.example slack/.env   # then paste the two tokens and the channel id
 ```
 
 **5. Install and run.**
 
+Everything runs from the **repo root**, like the rest of the project.
+
 ```sh
-cd slack
-pip install -r requirements.txt
-python -m slackbot.app
+pip install -r requirements.txt -r slack/requirements.txt
+python -m slack.slackbot.app
 ```
 
 **6. Prove it works.** In a second terminal:
 
 ```sh
-cd slack
-python -m slackbot.demo cold   # run 1: near-random predictions, pack asks 6 questions
-python -m slackbot.demo warm   # run 19: replayed, explained, asks nothing
+python -m slack.slackbot.demo cold   # run 1: near-random predictions, pack asks 6 questions
+python -m slack.slackbot.demo warm   # run 19: replayed, explained, asks nothing
 ```
 
 Click the buttons. Each click updates the message in place and appends a line to
@@ -126,6 +126,46 @@ delays the memory write but never loses the signal.
 
 Set `SIGNAL_WEBHOOK_URL` to any endpoint accepting `POST` of one JSON object.
 That is the whole integration — no shared library, no import.
+
+## Wired to the agent
+
+By default the surface runs on fixtures and writes clicks to JSONL only. Set
+`SLACK_BACKEND=1` and every click writes through to the real memory layers
+instead:
+
+```sh
+SLACK_BACKEND=1 python -m slack.slackbot.app     # clicks reach agent.feedback
+python -m slack.slackbot.live --day              # judge a day, post the digest
+python -m slack.slackbot.live --pack <job_id>    # build and post one apply-pack
+python -m slack.slackbot.live --claims           # post claims awaiting verification
+```
+
+The fixture path stays on purpose. If hotdata or the graph is down an hour
+before the pitch, the surface still demonstrates.
+
+**`bridge.py` is the whole seam**, and it is asymmetric by design:
+
+| Direction | What it is | Why |
+|---|---|---|
+| Out | Pure mapping — `DayResult` and `Pack` become the payloads the block builders already take | No side effects, so a rendering change can never reach a store, and mapping is testable without Slack or a network |
+| In | Pure dispatch — one `Signal` becomes one call into `agent.feedback` | That module owns the write order across HydraDB, hotdata and Cognee. Writing to a store here would give those guarantees a second, quieter implementation |
+
+Two decisions inside it worth knowing:
+
+- **`Prediction.score` never becomes a "% sure".** It is a weighted fit score
+  over coverage, similarity and preference fit, not a calibrated probability.
+  A ranking weight dressed up as confidence is a number a judge asks about once
+  and never trusts again.
+- **The Confirm prompt fires from inside the click that caused it.** A
+  `not for me` is written, `check_for_hypothesis` runs on the way out, and if
+  three answers now share a reason the prompt is posted immediately — a
+  preference that appears a minute later reads as coincidence rather than as
+  the agent having just learned something.
+
+Two registries make the round trip work. `SLATES` holds what the agent predicted
+per run, so a click can resolve it — an unresolved prediction is not evidence of
+anything. `QUESTIONS` holds each question as it was worded, because
+`answer_question` keys a `StandardAnswer` off the wording rather than off our id.
 
 ## Open, deliberately
 

@@ -96,7 +96,8 @@ def record_response(store: GraphStore, insight: Insight, day: int, run_id: str,
         "resolved_predictions": resolved,
         "preference_hypotheses": [
             {"preference_id": p.preference_id, "prompt": p.prompt(),
-             "rule": p.rule.sentence(), "evidence_count": p.evidence_count}
+             "rule": p.rule.sentence(), "evidence_count": p.evidence_count,
+             "evidence_jobs": list(p.evidence_jobs[:3])}
             for p in proposals
         ],
     }

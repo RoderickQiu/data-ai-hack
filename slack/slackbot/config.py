@@ -12,6 +12,13 @@ class ConfigError(RuntimeError):
     pass
 
 
+def _resolve(value: str) -> Path:
+    """Relative paths hang off this folder, never the working directory - the
+    repo root has its own data/ and the two must not collide."""
+    path = Path(value)
+    return path if path.is_absolute() else LOCAL_ROOT / path
+
+
 @dataclass(frozen=True)
 class Config:
     bot_token: str
@@ -23,6 +30,7 @@ class Config:
     signal_log: Path
     signal_webhook: str | None
     signal_webhook_token: str | None
+    backend: bool
 
 
 def load_config() -> Config:
@@ -48,7 +56,8 @@ def load_config() -> Config:
         api_host=os.getenv("SLACK_API_HOST", "127.0.0.1"),
         api_port=int(os.getenv("SLACK_API_PORT", "8765")),
         api_token=os.getenv("SLACK_API_TOKEN", "dev-local-token"),
-        signal_log=Path(os.getenv("SIGNAL_LOG", LOCAL_ROOT / "data" / "signals.jsonl")),
+        signal_log=_resolve(os.getenv("SIGNAL_LOG") or "data/signals.jsonl"),
         signal_webhook=os.getenv("SIGNAL_WEBHOOK_URL"),
         signal_webhook_token=os.getenv("SIGNAL_WEBHOOK_TOKEN"),
+        backend=os.getenv("SLACK_BACKEND", "").lower() in ("1", "true", "yes"),
     )
