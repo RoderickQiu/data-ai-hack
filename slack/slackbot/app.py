@@ -5,6 +5,7 @@ from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
 from .api import create_api
+from . import demo_commands
 from .config import Config, ConfigError, load_config
 from .handlers import register
 from .signals import SignalSink
@@ -14,6 +15,15 @@ def build(cfg: Config) -> tuple[App, SignalSink]:
     app = App(token=cfg.bot_token, raise_error_for_unhandled_request=False)
     sink = build_sink(cfg)
     register(app, sink)
+
+    # Every demo beat, triggered by @mentioning the bot. The stores come off
+    # the sink so the triggers work exactly when the backend does, and a
+    # fixtures-only bot still starts and says so rather than failing to boot.
+    demo_commands.register(
+        app, cfg,
+        lambda: ((sink.insight, sink.store)
+                 if getattr(sink, "store", None) is not None else None),
+    )
     return app, sink
 
 

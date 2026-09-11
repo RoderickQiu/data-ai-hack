@@ -1,3 +1,5 @@
 .env
 data/*.jsonl
 __pycache__/
+# Generated per pack; the claims they are built from live in the graph.
+data/resumes/

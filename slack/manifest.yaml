@@ -10,6 +10,7 @@ oauth_config:
   scopes:
     bot:
       - chat:write
+      - files:write
       - chat:write.public
       - channels:history
       - groups:history

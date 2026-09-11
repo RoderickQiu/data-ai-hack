@@ -21,6 +21,18 @@ def _host(value: str) -> str:
         raise ConfigError(str(exc)) from exc
 
 
+def _resume_source() -> Path:
+    """The markdown the PDF takes its structure from. A real resume.md wins
+    over the committed example, which is what candidate/README.md tells people
+    to do."""
+    override = os.getenv("RESUME_SOURCE")
+    if override:
+        return Path(override)
+    candidates = REPO_ROOT / "candidate"
+    real = candidates / "resume.md"
+    return real if real.exists() else candidates / "resume.example.md"
+
+
 def _resolve(value: str) -> Path:
     """Relative paths hang off this folder, never the working directory - the
     repo root has its own data/ and the two must not collide."""
@@ -37,6 +49,8 @@ class Config:
     api_port: int
     api_token: str
     signal_log: Path
+    resume_dir: Path
+    resume_source: Path
     signal_webhook: str | None
     signal_webhook_token: str | None
     backend: bool
@@ -69,6 +83,8 @@ def load_config() -> Config:
         api_port=int(os.getenv("SLACK_API_PORT", "8765")),
         api_token=os.getenv("SLACK_API_TOKEN", "dev-local-token"),
         signal_log=_resolve(os.getenv("SIGNAL_LOG") or "data/signals.jsonl"),
+        resume_dir=_resolve(os.getenv("RESUME_DIR") or "data/resumes"),
+        resume_source=_resume_source(),
         signal_webhook=os.getenv("SIGNAL_WEBHOOK_URL"),
         signal_webhook_token=os.getenv("SIGNAL_WEBHOOK_TOKEN"),
         backend=os.getenv("SLACK_BACKEND", "").lower() in ("1", "true", "yes"),

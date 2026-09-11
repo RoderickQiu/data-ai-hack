@@ -2,8 +2,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException
 from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
 
 from . import blocks as B
+from . import resume_pdf
 from .config import Config
 from .handlers import PACKS, QUESTIONS, SLATES
 from .schemas import AutonomyIn, ClaimsIn, DigestIn, PackIn, PostedOut, PreferenceIn, QuestionIn
@@ -48,7 +50,45 @@ def create_api(client: WebClient, cfg: Config) -> FastAPI:
         PACKS[p.job_id] = p
         QUESTIONS.update({q.question_id: q.text for q in p.questions})
         blocks, attachments = B.pack_message(p)
-        return post(p.channel, blocks, f"Apply pack: {p.title} at {p.company}", attachments)
+        posted = post(p.channel, blocks, f"Apply pack: {p.title} at {p.company}", attachments)
+        _attach_resume(p, posted)
+        return posted
+
+    def _attach_resume(p: PackIn, posted: PostedOut) -> None:
+        """Render the selected claims as a resume and put it in the thread.
+
+        In the thread rather than the message so the pack still reads as one
+        block, and best-effort throughout: a PDF that fails to render or upload
+        must not fail the pack that was already posted and is already correct.
+
+        A rejected pack produces no file — resume_pdf.build returns None — so
+        the citation check cannot be walked around by downloading the draft.
+        """
+        try:
+            markdown = (cfg.resume_source.read_text()
+                        if cfg.resume_source.exists() else "")
+            path = resume_pdf.build(p, candidate_name=p.candidate_name or "Candidate",
+                                    out_dir=cfg.resume_dir, resume_md=markdown)
+        except Exception as exc:
+            print(f"[resume] could not render: {type(exc).__name__}: {exc}")
+            return
+        if path is None:
+            return
+        try:
+            client.files_upload_v2(
+                channel=posted.channel, thread_ts=posted.ts, file=str(path),
+                filename=path.name, title=f"{p.candidate_name or 'Resume'} — {p.title}",
+                initial_comment=":page_facing_up: Resume for this role — every line a claim you verified.",
+            )
+        except SlackApiError as exc:
+            # files:write is a separate scope; without it the app has to be
+            # reinstalled. Say where the file is rather than losing it.
+            detail = exc.response.get("error", "")
+            client.chat_postMessage(
+                channel=posted.channel, thread_ts=posted.ts,
+                text=(f":page_facing_up: Resume written to `{path}`.\n"
+                      f"_Slack upload needs the `files:write` scope "
+                      f"({detail}) — add it to manifest.yaml and reinstall the app._"))
 
     @guarded.post("/preference", response_model=PostedOut)
     def preference(p: PreferenceIn) -> PostedOut:

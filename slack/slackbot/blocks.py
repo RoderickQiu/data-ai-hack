@@ -168,8 +168,16 @@ def pack_message(p: PackIn) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]
     blocks: list[dict[str, Any]] = [
         {"type": "header", "text": _plain(f"Apply pack · {p.title}")},
         _ctx(f"*{p.company}*", " · ".join(footer)),
-        {"type": "section", "text": _txt(p.summary)},
     ]
+    if not p.ok:
+        # The citation validator rejected this draft. Say so above the text, not
+        # below it: a reader who has already read the copy has already believed
+        # it, and the whole point of the check is that they never should.
+        blocks.append({"type": "section", "text": _txt(
+            f":no_entry: *Not ready to send — {p.failure or 'the citation check failed'}.*\n"
+            "Every factual sentence has to cite a verified claim. The draft is below "
+            "so you can see what it tried to say, but it is not an application yet.")})
+    blocks.append({"type": "section", "text": _txt(p.summary)})
 
     if p.claims:
         lines = "\n".join(f"• {c.text}  `[claim:{c.claim_id}]`" for c in p.claims)
@@ -183,8 +191,13 @@ def pack_message(p: PackIn) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]
         elements.append({"type": "button", "text": _plain("Open draft"), "url": p.doc_url, "action_id": "open_doc"})
     if p.sheet_url:
         elements.append({"type": "button", "text": _plain("Open tracker"), "url": p.sheet_url, "action_id": "open_sheet"})
-    elements.append(_btn("I applied", "report_applied", v))
-    blocks.append({"type": "actions", "block_id": f"pack::{p.job_id}", "elements": elements})
+    if p.ok:
+        # Never offer "I applied" on a draft that failed its own check.
+        elements.append(_btn("I applied", "report_applied", v))
+    if elements:
+        # Slack rejects an actions block with no elements, and a rejected pack
+        # with no questions and no links has none: every button was withheld.
+        blocks.append({"type": "actions", "block_id": f"pack::{p.job_id}", "elements": elements})
 
     attachments: list[dict[str, Any]] = []
     if p.gaps:

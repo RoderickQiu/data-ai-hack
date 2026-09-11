@@ -56,12 +56,15 @@ class PackIn(BaseModel):
     title: str
     company: str
     summary: str
+    ok: bool = Field(True, description="False when the citation validator rejected the pack")
+    failure: str | None = Field(None, description="Why it was rejected, shown to the human")
     claims: list[ClaimUsed] = []
     gaps: list[GapOut] = []
     questions: list[QuestionOut] = []
     answers_from_memory: int = 0
     doc_url: str | None = None
     sheet_url: str | None = None
+    candidate_name: str | None = Field(None, description="Heads the generated resume PDF")
     play: str | None = Field(None, description="e.g. 'apply-pack v3 (full replay)'")
     tokens: int | None = None
     channel: str | None = None

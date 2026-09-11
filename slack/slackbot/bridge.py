@@ -124,6 +124,7 @@ def digest_payload(result: Any, *, channel: str | None = None,
 
 
 def pack_payload(pack: Any, *, run_id: str, play: str | None = None,
+                 candidate_name: str | None = None,
                  channel: str | None = None) -> PackIn:
     """A ``Pack`` from ``agent.pack.build_pack`` becomes one apply-pack message."""
     answers = pack.answers or []
@@ -133,6 +134,12 @@ def pack_payload(pack: Any, *, run_id: str, play: str | None = None,
         title=pack.title,
         company=pack.company,
         summary=pack.copy or pack.failure or "",
+        # The citation validator's verdict travels with the pack. Without it a
+        # pack that failed the check renders exactly like one that passed, and
+        # the guarantee that every factual sentence cites a verified claim
+        # becomes something the human is told rather than shown.
+        ok=bool(pack.ok),
+        failure=pack.failure or None,
         claims=[ClaimUsed(claim_id=p["claim_id"], text=p.get("text", ""))
                 for p in pack.provenance],
         gaps=[GapOut(skill=skill, note=pack.gap_note or None) for skill in pack.gaps],
@@ -140,6 +147,7 @@ def pack_payload(pack: Any, *, run_id: str, play: str | None = None,
                    for q in pack.questions_to_ask],
         answers_from_memory=sum(1 for a in answers
                                 if a.get("source") in ANSWERED_FROM_MEMORY),
+        candidate_name=candidate_name,
         play=play,
         tokens=(pack.tokens_in + pack.tokens_out) or None,
         channel=channel,

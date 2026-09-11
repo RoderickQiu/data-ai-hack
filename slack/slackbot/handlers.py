@@ -228,13 +228,8 @@ def register(app: App, sink: SignalSink) -> None:
     def on_open_sheet(ack):
         ack()
 
-    @app.event("app_mention")
-    def on_mention(event, say):
-        say(
-            thread_ts=event.get("ts"),
-            text="I post a ranked digest once a day. Tap *Keep*, *Not for me* or *Skip* on any role — "
-            "*Not for me* is the one that teaches me something.",
-        )
+    # app_mention is handled by demo_commands, registered from app.py: it needs
+    # the config and the stores, which this function does not have.
 
 
 def _fetch_blocks(client, channel: str, ts: str) -> dict[str, Any]:

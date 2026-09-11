@@ -67,6 +67,9 @@ class BackendSink(SignalSink):
                 call(self.cfg, "/preference", bridge.preference_payload(
                     hypothesis, run_id=record.get("run_id") or "").model_dump())
 
+            if result.get("resolved_predictions"):
+                update_run_metrics(self.insight, record.get("run_id") or "")
+
             if result.get("action") == "prepare_pack":
                 post_pack(self.cfg, self.insight, self.store,
                           result["job_id"], result["day"], run_id=result["run_id"])
@@ -122,8 +125,52 @@ def post_pack(cfg: Config, insight, store, job_id: str, day: int,
 
     pack, metrics = prepare_pack(insight, store, job_id, day, screening_questions=questions)
     payload = bridge.pack_payload(pack, run_id=run_id or metrics.run_id,
-                                  play=metrics.mode.replace("_", " "))
+                                  play=metrics.mode.replace("_", " "),
+                                  candidate_name=candidate_name(store))
     return call(cfg, "/pack", payload.model_dump())
+
+
+def update_run_metrics(insight, run_id: str) -> dict[str, Any]:
+    """Fold the human's answers back into the run row they belong to.
+
+    A run row is written when the digest is posted — before anyone has answered
+    it — so precision, accuracy and human_touches are all still empty at that
+    moment. demo/loop.py re-logs the row once its persona has answered; the
+    Slack path never did. So a real human answering a real digest reached the
+    graph and hotdata's applications table, and never reached the one table the
+    chart reads: 10 clicks on day 11 against a row saying human_touches 0.
+
+    Recomputed from applications rather than accumulated per click, because
+    clicks arrive one at a time and the answer to "how good was this slate" is
+    only meaningful over the whole slate.
+    """
+    from agent.metrics import skip_class_accuracy
+
+    rows = [r for r in insight.run("runs_series", {"limit": 500})
+            if r.get("run_id") == run_id]
+    answered = [r for r in insight.run("predictions_window", {"limit": 500})
+                if r.get("run_id") == run_id and r.get("predicted") and r.get("actual")]
+    if not rows or not answered:
+        return {}
+
+    row = dict(rows[0])
+    keeps = sum(1 for r in answered if r["actual"] == "keep")
+    row["actual_keep"] = keeps
+    row["precision_at_5"] = round(keeps / len(answered), 4)
+    row["prediction_accuracy"] = skip_class_accuracy(answered)
+    row["human_touches"] = len(answered)
+    insight.log_run(row)
+    return {"run_id": run_id, "answered": len(answered),
+            "precision_at_5": row["precision_at_5"],
+            "prediction_accuracy": row["prediction_accuracy"]}
+
+
+def candidate_name(store) -> str:
+    """Whatever the graph calls the candidate, for the resume heading."""
+    for node in store.graph.nodes.values():
+        if node.label == "Candidate" and node.props.get("name"):
+            return str(node.props["name"])
+    return "Candidate"
 
 
 def post_pending_claims(cfg: Config, store, run_id: str = "verify") -> dict[str, Any]:
