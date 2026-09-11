@@ -856,7 +856,17 @@ function AccuracyPlot({
   })), firstKnown >= 0 && /*#__PURE__*/React.createElement(DirectLabel, {
     x: L,
     y: y(values[firstKnown]) + 20
-  }, pct(values[firstKnown]), values[firstKnown] < 0.6 ? ' — barely better than a coin flip' : ''), firstKnown >= 0 && /*#__PURE__*/React.createElement(DirectLabel, {
+  }, pct(values[firstKnown]), values[firstKnown] < 0.6 ? ' — barely better than a coin flip' : ''), firstKnown >= 0 && lastKnown < n - 1 && /*#__PURE__*/React.createElement(Fragment, null, /*#__PURE__*/React.createElement("path", {
+    d: `M ${xf(lastKnown)} ${y(values[lastKnown])} L ${R} ${y(values[lastKnown])}`,
+    fill: "none",
+    stroke: "var(--ink-2)",
+    strokeWidth: "2",
+    strokeDasharray: "3 6",
+    opacity: "0.45"
+  }), /*#__PURE__*/React.createElement(DirectLabel, {
+    x: xf(lastKnown) + 10,
+    y: y(values[lastKnown]) - 10
+  }, "no answers since day ", runs[lastKnown].day)), firstKnown >= 0 && /*#__PURE__*/React.createElement(DirectLabel, {
     x: R + 10,
     y: y(values[lastKnown]) + 4
   }, pct(values[lastKnown])), !known.length && /*#__PURE__*/React.createElement("text", {
