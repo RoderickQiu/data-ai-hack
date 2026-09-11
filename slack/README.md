@@ -32,7 +32,7 @@ RocketRide / MCP  --POST /digest,/pack,...-->  slackbot  --Signal-->  data/signa
 ## See the UI before you have a Slack app
 
 ```sh
-python -m slack.slackbot.preview
+./.venv/bin/python -m slack.slackbot.preview
 ```
 
 Prints a Block Kit Builder link for each surface. No tokens needed.
@@ -62,18 +62,21 @@ cp slack/.env.example slack/.env   # then paste the two tokens and the channel i
 
 **5. Install and run.**
 
-Everything runs from the **repo root**, like the rest of the project.
+Everything runs from the **repo root**, like the rest of the project, using the
+project virtualenv. macOS has no bare `python`, and the dependencies are not
+installed system-wide, so use `./.venv/bin/python` rather than `python`.
 
 ```sh
-pip install -r requirements.txt -r slack/requirements.txt
-python -m slack.slackbot.app
+cd /path/to/data-ai-hack
+./.venv/bin/pip install -r requirements.txt -r slack/requirements.txt
+./.venv/bin/python -m slack.slackbot.app
 ```
 
 **6. Prove it works.** In a second terminal:
 
 ```sh
-python -m slack.slackbot.demo cold   # run 1: near-random predictions, pack asks 6 questions
-python -m slack.slackbot.demo warm   # run 19: replayed, explained, asks nothing
+./.venv/bin/python -m slack.slackbot.demo cold   # run 1: near-random predictions, pack asks 6 questions
+./.venv/bin/python -m slack.slackbot.demo warm   # run 19: replayed, explained, asks nothing
 ```
 
 Click the buttons. Each click updates the message in place and appends a line to
@@ -134,10 +137,10 @@ By default the surface runs on fixtures and writes clicks to JSONL only. Set
 instead:
 
 ```sh
-SLACK_BACKEND=1 python -m slack.slackbot.app     # clicks reach agent.feedback
-python -m slack.slackbot.live --day              # judge a day, post the digest
-python -m slack.slackbot.live --pack <job_id>    # build and post one apply-pack
-python -m slack.slackbot.live --claims           # post claims awaiting verification
+SLACK_BACKEND=1 ./.venv/bin/python -m slack.slackbot.app     # clicks reach agent.feedback
+./.venv/bin/python -m slack.slackbot.live --day              # judge a day, post the digest
+./.venv/bin/python -m slack.slackbot.live --pack <job_id>    # build and post one apply-pack
+./.venv/bin/python -m slack.slackbot.live --claims           # post claims awaiting verification
 ```
 
 The fixture path stays on purpose. If hotdata or the graph is down an hour
