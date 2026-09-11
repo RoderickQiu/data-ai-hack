@@ -547,7 +547,7 @@ Pre-event setup:
   datasource and loads 200 rows into `jobs.public.jobs`. Still open: the
   canonical `jobs` schema with `virtual_day`, and the `applications` and `runs`
   tables.
-- ~~An API key for the agent's model.~~ **Done: Qwen `qwen3.7-plus` on an
+- ~~An API key for the agent's model.~~ **Done: Qwen `qwen3.8-max` on an
   Alibaba Cloud MaaS workspace endpoint, in `.env`.** RocketRide does not front
   a model — every `llm_*` node requires its own `apikey`, and
   `agent_rocketride.invoke.llm` is `min 1, max 1`, so without a key there is no
@@ -565,7 +565,7 @@ Pre-event setup:
       the right enum value and params; on turn 2, fed a tool result, it chained
       to the next tool carrying an id out of the first result. That was the real
       risk in swapping models and it is cleared.
-    - `qwen3.7-plus` is a reasoning model, ~60-120 reasoning tokens per call,
+    - `qwen3.8-max` is a reasoning model, ~87 reasoning tokens per call,
       which is variance on the exact metric the demo rests on. It can be turned
       off: `enable_thinking: false` (flat in the body — DashScope wants it
       un-nested, unlike self-hosted vLLM which wants
