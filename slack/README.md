@@ -32,7 +32,7 @@ RocketRide / MCP  --POST /digest,/pack,...-->  slackbot  --Signal-->  data/signa
 ## See the UI before you have a Slack app
 
 ```sh
-python -m slackbot.preview
+cd slack && python -m slackbot.preview
 ```
 
 Prints a Block Kit Builder link for each surface. No tokens needed.
@@ -63,6 +63,7 @@ cp .env.example .env   # then paste the two tokens and the channel id
 **5. Install and run.**
 
 ```sh
+cd slack
 pip install -r requirements.txt
 python -m slackbot.app
 ```
@@ -70,6 +71,7 @@ python -m slackbot.app
 **6. Prove it works.** In a second terminal:
 
 ```sh
+cd slack
 python -m slackbot.demo cold   # run 1: near-random predictions, pack asks 6 questions
 python -m slackbot.demo warm   # run 19: replayed, explained, asks nothing
 ```
@@ -92,7 +94,7 @@ Interactive docs at <http://127.0.0.1:8765/docs>. Every endpoint takes
 | `POST /question` | One `ask_human` question | §6.2 |
 | `GET /health` | Channel, sink path, whether a webhook is configured | — |
 
-Payload shapes are in `schemas.py`; realistic examples are in `fixtures.py` and
+Payload shapes are in `slackbot/schemas.py`; realistic examples are in `fixtures.py` and
 are what `/docs` shows.
 
 ## Outbound signals
@@ -127,7 +129,7 @@ That is the whole integration — no shared library, no import.
 
 ## Open, deliberately
 
-- **Pack state is in-process.** `handlers.PACKS` holds posted packs so the
+- **Pack state is in-process.** `slackbot/handlers.py`'s `PACKS` holds posted packs so the
   questions modal can rebuild itself. A restart loses pending question modals;
   reposting the pack fixes it. Persisting it is not worth the hour.
 - **No retry on `chat_update`.** A rate-limited update leaves the buttons live

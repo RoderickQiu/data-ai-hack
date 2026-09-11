@@ -32,7 +32,7 @@ def load_config() -> Config:
     missing = [k for k in ("SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_CHANNEL") if not os.getenv(k)]
     if missing:
         raise ConfigError(
-            f"missing {', '.join(missing)} in .env - see README.md setup steps 1-4"
+            f"missing {', '.join(missing)} in .env - see slack/README.md setup steps 1-4"
         )
 
     app_token = os.environ["SLACK_APP_TOKEN"]

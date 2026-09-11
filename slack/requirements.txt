@@ -1,5 +1,5 @@
 # Slack surface only. Install into the same venv as the repo root requirements.
-#   pip install -r "Individual Development/requirements.txt"
+#   pip install -r slack/requirements.txt
 # Pin exactly with `pip freeze` once it runs, before the first Snyk scan.
 
 slack-bolt>=1.21
