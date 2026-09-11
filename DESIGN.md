@@ -577,12 +577,33 @@ Pre-event setup:
       typed `Record<string, unknown>`, so an extra `enable_thinking` key may
       pass straight through. `POST /task` reports bad fields one at a time, so
       trying it costs nothing once a pipeline exists.
-    - If it does not pass through, fallbacks in order. RocketRide models
-      thinking as separate *profiles* elsewhere (`kimi-k2-thinking`,
-      `qwen-plus-2025-07-28-thinking`), but our endpoint has no `-instruct`
-      sibling for `qwen3.7-plus`; a true non-thinking model on the same key is
-      `qwen3-235b-a22b-instruct-2507`. Worst case, keep the reasoning tokens and
-      say on the slide that the line includes them.
+    - If it does not pass through, the fallback is **not** an `-instruct`
+      model. That naming belongs to the 2025-era open-weight checkpoints on
+      this endpoint; every current model here thinks by default. The fallback
+      is to pick the model that thinks *least*. Measured on the same
+      three-tool prompt, one call each:
+
+      | model | reasoning | total | thinking off | tool call |
+      |---|---|---|---|---|
+      | qwen3.8-flash | 81 | 678 | 572 | correct |
+      | qwen3.8-max | 87 | 681 | 558 | correct |
+      | kimi-k3 | 156 | 608 | 385 | correct |
+      | deepseek-v4-pro | 175 | 767 | — | correct |
+      | qwen3.7-plus | 192 | 759 | 603 | correct |
+      | qwen3.7-max | 266 | 825 | — | correct |
+      | glm-5.2 | 307 | 744 | — | correct |
+      | qwen3.7-flash | 511 | 1064 | — | correct |
+      | qwen3.6-flash | 542 | 1103 | — | correct |
+
+      All nine selected the right tool with the right enum and params, so tool
+      calling is not the discriminator here — reasoning overhead is.
+      `qwen3.8-max` is both newer than `qwen3.7-plus` and cheaper on it, and
+      `enable_thinking: false` zeroes reasoning on every model tested with tool
+      calling intact.
+    - **Reasoning tokens vary run to run on an identical prompt**:
+      `qwen3.7-plus` returned 114 then 192, `glm-5.2` 307 then 397. That is
+      noise on the y-axis of the headline chart, which is the real argument for
+      turning thinking off rather than for any particular model.
     - `modelTotalTokens` is required by the node and is the context window.
       Take the real number from the Aliyun console.
 - **`agent_rocketride` also requires exactly one `memory` connection**
