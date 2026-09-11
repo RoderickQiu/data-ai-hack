@@ -1,0 +1,8 @@
+# Python dependencies. Install with:  pip install -r requirements.txt
+# Python 3.10 to 3.14 (cognee does not support 3.15 yet).
+
+# Knowledge-graph memory layer. Pulls in litellm, lancedb, ladybug, sqlalchemy, etc.
+cognee==1.5.4
+
+# Only needed for Option A (Vertex AI / Gemini). Harmless to install for Option B.
+google-cloud-aiplatform==2.1.0

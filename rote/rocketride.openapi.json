@@ -1,0 +1,624 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "RocketRide Web Services",
+    "version": "0.1.0",
+    "description": "RocketRide orchestrates and executes pipelines (\"tasks\"). Submit a pipeline with executeTask, poll it with getTaskStatus, stream inputs with uploadTaskData, and stop it with cancelTask. Every call authenticates with `Authorization: Bearer <ROCKETRIDE_APIKEY>`."
+  },
+  "servers": [
+    {
+      "url": "https://api.rocketride.ai:443",
+      "description": "RocketRide managed cloud engine"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/status": {
+      "get": {
+        "summary": "Status",
+        "description": "Compute the server status.",
+        "operationId": "getStatus",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Result"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/version": {
+      "get": {
+        "summary": "Version",
+        "description": "Version Endpoint.\n\nReturns the version of the cloud Engine.\n\nReturns:\n    Result: The version string.",
+        "operationId": "getVersion",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Result"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/services": {
+      "get": {
+        "summary": "Services Get",
+        "description": "Asynchronously retrieves service information.\n\nArgs:\n    service (str, optional): The name of a specific service to retrieve.\n\nReturns:\n    Result: A response object containing the parsed JSON output or an error message.",
+        "operationId": "listServices",
+        "parameters": [
+          {
+            "name": "service",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Service"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Result"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/task": {
+      "post": {
+        "summary": "Task Execute",
+        "description": "Execute a task.\n\nArgs:\n    pipeline (Dict[str, Any]): The configuration for the new pipeline.\n    authorization (str): The API key for authentication, provided in the Authorization header.\n\nReturns:\n    ResultBase: A standardized response indicating success or failure.\n\nBehavior:\n    - Validates the API key.\n    - Constructs a unique identifier (`pipeKey`) using the API key and pipeline name.\n    - Checks if the pipeline already exists; if so, returns an error response.\n    - Instantiates an `ILoader` and initializes it with the pipeline configuration.\n    - Stores the pipeline control information in the global `pipes` dictionary.\n    - Returns a success response upon successful creation.\n\nExample Request:\n    >>> PUT / task\n    Headers:\n        Authorization: Bearer abc123\n    Body:\n        {\n            \"source\": \"s3://bucket/data\",\n            \"transformations\": [\"filter\", \"aggregate\"]\n        }\n\nExample Response (Success):\n    {\n        \"status\": \"OK\",\n        \"data\": {\n            \"token\": \"xyz\"\n        }\n    }\n\nExample Response (Failure):\n    {\n        \"status\": \"Error\",\n        \"error\": {\n            \"message\": \"Could not execute task\"\n        }\n    }",
+        "operationId": "executeTask",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional token for the task",
+              "title": "Token"
+            },
+            "description": "Optional token for the task"
+          },
+          {
+            "name": "threads",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 64,
+              "minimum": 1,
+              "description": "Optional number of threads to use (1\u201364)",
+              "default": 4,
+              "title": "Threads"
+            },
+            "description": "Optional number of threads to use (1\u201364)"
+          },
+          {
+            "name": "trace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Optional trace flags for debugging",
+              "title": "Trace"
+            },
+            "description": "Optional trace flags for debugging"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Pipeline"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultBase"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Task Status",
+        "description": "Get the status of a task.\n\nArgs:\n    token (str): The task token received from task_Execute.\n    authorization (str): API key for authentication.\n\nReturns:\n    ResultBase: A response containing the task's current status.",
+        "operationId": "getTaskStatus",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Token returned from task execute",
+              "title": "Token"
+            },
+            "description": "Token returned from task execute"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultBase"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Task Cancel",
+        "description": "Cancel a task.\n\nArgs:\n    token (str): The task token received from task_Execute.\n    authorization (str): API key for authentication.",
+        "operationId": "cancelTask",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Token returned from task execute",
+              "title": "Token"
+            },
+            "description": "Token returned from task execute"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultBase"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/task/data": {
+      "post": {
+        "summary": "Task Data",
+        "description": "Process data uploads through RocketRide pipelines.\n\nThis endpoint handles two types of uploads:\n1. Multipart form data with files and text fields\n2. Raw request body streams (PUT/POST with direct content)\n\nArgs:\n    request (Request): The FastAPI request object\n    token (str): Task token from pipeline execution\n    authorization (str): Bearer token in Authorization header\n\nExample Usage:\n    # Multipart form upload\n    curl -X POST \"http://localhost:8000/task/data?token=task-123\" \\\n         -H \"Authorization: Bearer your-api-key\" \\\n         -F \"file=@document.pdf\" \\\n         -F \"question=What is this about?\"\n\n    # Raw stream upload (PUT or POST)\n    curl -X PUT \"http://localhost:8000/task/data?token=task-123\" \\\n         -H \"Authorization: Bearer your-api-key\" \\\n         -H \"Content-Type: application/pdf\" \\\n         -H \"Content-Disposition: attachment; filename=document.pdf\" \\\n         --data-binary @document.pdf\n\n    # Text stream upload\n    curl -X POST \"http://localhost:8000/task/data?token=task-123\" \\\n         -H \"Authorization: Bearer your-api-key\" \\\n         -H \"Content-Type: text/plain\" \\\n         -d \"Some text content\"",
+        "operationId": "uploadTaskData",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Token returned from task execute",
+              "title": "Token"
+            },
+            "description": "Token returned from task execute"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/webhook": {
+      "post": {
+        "summary": "Task Data",
+        "description": "Process data uploads through RocketRide pipelines.\n\nThis endpoint handles two types of uploads:\n1. Multipart form data with files and text fields\n2. Raw request body streams (PUT/POST with direct content)\n\nArgs:\n    request (Request): The FastAPI request object\n    token (str): Task token from pipeline execution\n    authorization (str): Bearer token in Authorization header\n\nExample Usage:\n    # Multipart form upload\n    curl -X POST \"http://localhost:8000/task/data?token=task-123\" \\\n         -H \"Authorization: Bearer your-api-key\" \\\n         -F \"file=@document.pdf\" \\\n         -F \"question=What is this about?\"\n\n    # Raw stream upload (PUT or POST)\n    curl -X PUT \"http://localhost:8000/task/data?token=task-123\" \\\n         -H \"Authorization: Bearer your-api-key\" \\\n         -H \"Content-Type: application/pdf\" \\\n         -H \"Content-Disposition: attachment; filename=document.pdf\" \\\n         --data-binary @document.pdf\n\n    # Text stream upload\n    curl -X POST \"http://localhost:8000/task/data?token=task-123\" \\\n         -H \"Authorization: Bearer your-api-key\" \\\n         -H \"Content-Type: text/plain\" \\\n         -d \"Some text content\"",
+        "operationId": "postWebhook",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Token returned from task execute",
+              "title": "Token"
+            },
+            "description": "Token returned from task execute"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/marketplace/apps": {
+      "get": {
+        "summary": "Marketplace Manifest",
+        "description": "Return the dynamic marketplace app catalog.\n\nRoute: GET /marketplace/apps\n\nEach entry in the returned list conforms to the AppManifestEntry shape used\nby the existing apps.json static manifest plus an ``appPrices`` field.\n\nApproved apps that pass ``can_access_app()`` for the caller are included.\nPending, draft, and rejected apps are excluded.\n\nArgs:\n    request: Incoming FastAPI request.\n\nReturns:\n    JSONResponse with ``{\"apps\": [...]}`` on success.",
+        "operationId": "listMarketplaceApps",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "RocketRide API key. Supplied at runtime from ROCKETRIDE_APIKEY."
+      }
+    },
+    "schemas": {
+      "DataResult": {
+        "properties": {
+          "objectsRequested": {
+            "type": "integer",
+            "title": "Objectsrequested",
+            "default": 0
+          },
+          "objectsCompleted": {
+            "type": "integer",
+            "title": "Objectscompleted",
+            "default": 0
+          },
+          "resultTypes": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Resulttypes",
+            "default": {}
+          },
+          "objects": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": "object",
+            "title": "Objects",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "title": "DataResult",
+        "description": "Holds the data for tracking the number of objects requested, completed, and the status of each object."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Result": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK",
+              "Error"
+            ],
+            "title": "Status"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "metrics": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metrics"
+          },
+          "warnings": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "Result",
+        "description": "A generic result with no data."
+      },
+      "ResultBase": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK",
+              "Error"
+            ],
+            "title": "Status"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "metrics": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metrics"
+          },
+          "warnings": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "ResultBase",
+        "description": "Base class for API responses with a standardized format.\n\n- `status`: Always present, indicates if the response is \"OK\" or \"Error\".\n- `data`: Optional, contains the successful response data.\n- `error`: Optional, contains error details when `status` is \"Error\"."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
