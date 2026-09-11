@@ -1,7 +1,9 @@
 # data-ai-hack
 
-Knowledge-graph memory over our data using [cognee](https://docs.cognee.ai/), backed by
-either Vertex AI (Gemini) or any OpenAI-compatible API.
+Knowledge-graph memory over our data using [Cognee Cloud](https://docs.cognee.ai/) —
+one managed tenant shared by the whole team, reached over REST. Nothing about the
+memory layer runs on your laptop, so there is no model to configure and no local
+graph to drift out of sync with everyone else's.
 
 The full stack, in one line:
 
@@ -14,10 +16,12 @@ cognee (memory) -> HydraDB (stores it) -> hotdata.dev (ad-hoc queries) -> Rocket
 Nothing here is shared through git. Keys, logins and CLI installs live on your own
 machine, so each of us has to complete every step below. Tick them off in order.
 
-1. **Clone and install cognee.** Follow [Setup](#setup) through `cp .env.example .env`.
-2. **Pick an LLM backend** and fill in `.env`: [Option A](#option-a-vertex-ai-gemini)
-   needs Google Cloud access, [Option B](#option-b-openai-compatible-api-no-gcloud)
-   needs only an API key.
+1. **Clone and install.** Follow [Setup](#setup) through `cp .env.example .env`.
+   Two small packages, any Python 3.10+, no gcloud and no LLM keys of your own.
+2. **Join the Cognee Cloud tenant** and copy `COGNEE_BASE_URL` and
+   `COGNEE_API_KEY` out of the dashboard's "Connect your agent" panel into `.env`.
+   The tenant already holds the team's graph; you are connecting to it, not
+   creating your own.
 3. **Add the service keys to `.env`.** Ask in the team channel for any you do not have.
    `.env.example` explains each one.
    - `ROCKETRIDE_APIKEY` (dev connection, for running and iterating)
@@ -26,7 +30,7 @@ machine, so each of us has to complete every step below. Tick them off in order.
    - `HOTDATA_API_KEY` — that spelling exactly. The CLI reads no other name, and
      without it every command falls back to the browser session and dies with
      "session expired or revoked".
-4. **Verify cognee** with the snippet in [Verify the setup](#verify-the-setup).
+4. **Verify the Cognee tenant** with the snippet in [Verify the setup](#verify-the-setup).
 5. **Set up hotdata.** Install the CLI, then let the script create the database,
    connect the Greenhouse source, and load rows:
 
@@ -83,7 +87,7 @@ SKIP_COGNEE=1 sh scripts/verify-setup.sh   # skip the slow ingest
 | 1 | RocketRide | bearer `GET /services` returns 200 | re-copy `ROCKETRIDE_APIKEY` from the dashboard |
 | 2 | HydraDB | `databases.status()` reports graph, scheduler and both vector stores up | check `HYDRADB_APIKEY` and `HYDRADB_DATABASE` |
 | 3 | hotdata | key authenticates, ≥1 data source, rows queryable | `sh scripts/hotdata-setup.sh` |
-| 4 | cognee | real `add` → `cognify` → `search` round trip | see [Verify the setup](#verify-the-setup) |
+| 4 | Cognee Cloud | key authenticates, then a real `add` → `cognify` → `search` round trip on the tenant | re-copy `COGNEE_BASE_URL` / `COGNEE_API_KEY`; see [Verify the setup](#verify-the-setup) |
 | 5 | Rote | signed in, adapter installed, live authenticated call | `ROTE_ORG=data-ai-hack sh scripts/rote-setup.sh` |
 
 The one thing the script cannot check is the **RocketRide credit balance**. No
@@ -119,7 +123,9 @@ personal handle at the end.
 
 ## Setup
 
-Requires Python 3.10 to 3.14 (cognee does not yet support 3.15; developed on 3.14).
+Requires Python 3.10 or newer. The old 3.14 ceiling is gone: the heavyweight
+`cognee` package is no longer installed, so its version constraints no longer
+apply here.
 
 ```bash
 git clone <repo-url> && cd data-ai-hack
@@ -130,96 +136,72 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Then open `.env` and pick **one** of the two LLM options below. Everything else in
-the file is explained inline.
+Then open `.env` and fill in the two Cognee lines from the dashboard:
 
-### Option A: Vertex AI (Gemini)
+```
+COGNEE_BASE_URL=https://tenant-<tenant-uuid>.aws.cognee.ai
+COGNEE_API_KEY=<your-cognee-api-key>
+COGNEE_DATASET=candidate
+```
 
-Uses Gemini 3.8 Flash for the LLM and Gemini Embedding 2 for embeddings. Needs a
-Google Cloud project with the Vertex AI API enabled and a one-time login on your
-machine:
+That is the whole memory-layer configuration. The tenant owns its own LLM and
+embedding stack, so there is no `gcloud auth application-default login`, no
+Vertex project, no `EMBEDDING_DIMENSIONS` to keep in sync with a vector store,
+and no per-teammate model drift.
+
+Two things worth knowing before you write any calls:
+
+- **Auth is `X-Api-Key`, not bearer.** `Authorization: Bearer <the same key>`
+  returns 401 on every route. This is also why the lightweight `cognee-sdk`
+  package on PyPI is unusable for us: it only speaks bearer, and it exposes no
+  `remember` / `recall` / `skills` routes. Use `memory/cognee_client.py`.
+- **The base URL is per-tenant.** There is no shared `api.cognee.ai` host; the
+  tenant UUID is part of the hostname.
+
+Upgrading from the old local setup? Drop the packages you no longer need:
 
 ```bash
-gcloud auth application-default login
-gcloud auth application-default set-quota-project <your-gcp-project-id>
+pip uninstall -y cognee google-cloud-aiplatform     # ~1 GB back
 ```
-
-In `.env` set `VERTEXAI_PROJECT=<your-gcp-project-id>` and leave the rest of the
-Vertex block as it is. Notes:
-
-- `VERTEXAI_LOCATION` must stay `global`. These models are not served from regional
-  endpoints and will 404 elsewhere.
-- `LLM_API_KEY` and `EMBEDDING_API_KEY` are placeholders. Cognee requires a non-empty
-  value, but Vertex authenticates with your gcloud credentials and ignores it.
-- `EMBEDDING_BATCH_SIZE=1` is required. Gemini Embedding 2 on Vertex fuses every
-  input in a request into a single vector, so larger batches break indexing.
-- Do not set `LLM_TEMPERATURE`. Gemini 3.6 Flash and later reject it.
-
-### Option B: OpenAI-compatible API (no gcloud)
-
-For anyone without Google Cloud access. Works with the official OpenAI API,
-OpenRouter, Groq, DeepSeek, Together, a LiteLLM proxy, vLLM, LM Studio, or
-Ollama's `/v1` endpoint.
-
-In `.env`, comment out the Vertex `LLM_*` and `EMBEDDING_*` lines and uncomment
-the Option B block, filling in:
-
-```
-LLM_PROVIDER=custom
-LLM_MODEL=openai/<model-name>        # keep the openai/ prefix
-LLM_ENDPOINT=https://<host>/v1       # base URL up to and including /v1
-LLM_API_KEY=<key>
-
-EMBEDDING_PROVIDER=openai_compatible
-EMBEDDING_MODEL=<embedding-model>
-EMBEDDING_ENDPOINT=https://<host>/v1
-EMBEDDING_API_KEY=<key>
-EMBEDDING_DIMENSIONS=1536            # must match the embedding model
-```
-
-`EMBEDDING_DIMENSIONS` is required here. Cognee cannot detect the size of an
-unknown model and would silently assume 3072. Changing it later needs a fresh
-vector database.
 
 ## Verify the setup
 
 With the venv active and `.env` filled in, this adds one document, builds the
-graph, and runs a search. It takes about half a minute on Vertex.
+graph, runs a search, and deletes the scratch dataset again. It takes about
+35 seconds.
 
 ```bash
-python - <<'EOF'
-import asyncio, cognee
-from cognee.api.v1.search import SearchType
-
-async def main():
-    await cognee.add("Ada Lovelace wrote the first computer program in 1843.")
-    await cognee.cognify()
-    print(await cognee.search(
-        query_type=SearchType.GRAPH_COMPLETION,
-        query_text="Who wrote the first computer program?",
-    ))
-
-asyncio.run(main())
-EOF
+python memory/cognee_client.py
 ```
 
-Expected output ends with a search result naming Ada Lovelace.
+Expected output: a quota line, a search result naming Ada Lovelace, a node and
+edge count, and `smoke dataset removed`.
+
+The same round trip is check 4 of `sh scripts/verify-setup.sh`.
 
 ## Things to know
 
-- **`.env` overrides your shell.** Cognee loads the project `.env` with override
-  enabled and finds it by walking up from the venv, so exporting a variable in the
-  terminal has no effect. Edit the file instead.
-- **Storage is local by default.** Graph, vector, and relational data live under
-  cognee's package directory using Ladybug, LanceDB, and SQLite. No extra services
-  are needed. To wipe everything:
+- **Your shell wins over `.env`.** `memory/cognee_client.py` uses
+  `os.environ.setdefault`, so an exported variable overrides the file. (The old
+  local cognee package inverted this, which surprised everyone at least once.)
+- **Storage is the tenant's.** Graph, vector and relational data live in Cognee
+  Cloud; nothing is written under your home directory and there is nothing to
+  prune locally. Quota is 1.07 GB — check it with `CogneeCloud().quota()`. To
+  throw away a dataset:
 
   ```python
-  await cognee.prune.prune_data()
-  await cognee.prune.prune_system(metadata=True)
+  from memory.cognee_client import CogneeCloud
+  with CogneeCloud() as c:
+      c.delete_dataset(c.dataset_id("scratch"))
   ```
 
-- **Logs** are written to `~/.cognee/logs/`. Set `LITELLM_LOG=DEBUG` in `.env` to see
-  the raw requests sent to the model provider.
+- **`cognify` is asynchronous unless you ask it not to be.** It returns a
+  `pipeline_run_id` immediately and builds the graph server-side; pass
+  `wait=True` (the client's default) to block until the graph is ready.
+- **`recall` without a dataset only searches `default_dataset`**, not everything
+  you can read. Always name the dataset.
+- **The dashboard is the debugger.** Sessions, per-model cost, and a live graph
+  visualiser are all in the Cognee Cloud UI, which beats reading
+  `~/.cognee/logs/` — and works for the demo too.
 - **Secrets.** `.env` is gitignored. `.env.example` holds placeholders only; keep it
   that way when adding new keys.

@@ -42,28 +42,57 @@ solve that honestly.
 
 | Layer | Tool | What it owns in our system |
 |---|---|---|
-| Structure | Cognee | Ingests resume, preference text, job descriptions, and every feedback and tool trace. Extracts typed entities with a custom graph model. |
+| Structure | Cognee Cloud | Managed tenant. Ingests resume, preference text, job descriptions, and every feedback and tool trace. Extracts typed entities with a custom graph model passed as `graphModel`. |
 | Memory | HydraDB | Durable candidate graph: Candidate, Skill, Job, Company, Application, Outcome, Preference. Multi-hop Cypher for ranking, prediction, and "why". |
 | Insight | hotdata.dev | `jobs`, `applications`, `runs` tables over a ~1000 row corpus. SQL for new-since-last-run, salary percentiles, hiring waves, reply rate by source. Vector and BM25 index on job descriptions. |
 | Motion | RocketRide | The agent loop. Wave-planning agent with Cognee, HydraDB, and our MCP tools plus Slack and Sheets (Docs, Calendar, Gmail if time). |
 | Muscle memory | Modiqo Rote | Plays for `apply-pack`, `refresh-and-rank`, `ingest-ats`. Replayed instead of re-reasoned. Each run logged back into Cognee as a `SkillRunEntry`. |
 | Security | Snyk | Whitelists and allowlists as design decisions, plus `snyk test` and `snyk code test` in a Makefile target before every commit. |
 
-### Cognee (already wired in this repo, v1.5.4)
+### Cognee Cloud (managed tenant, wired in this repo)
 
-Primitives we use, all verified present in the installed package:
+Cognee runs as a hosted tenant, not a local library. Nothing imports the
+`cognee` package; `memory/cognee_client.py` is a thin `X-Api-Key` client over
+the tenant's REST API. Three consequences worth stating in the pitch:
 
-- `cognee.remember(data, dataset_name="candidate")` for resume, preferences,
-  and job descriptions. Pass a custom `graph_model` so extracted entities are
-  typed (`Candidate`, `Skill`, `Job`, `Company`, `Requirement`) instead of
-  generic `Entity`. Typed labels are what make the HydraDB Cypher readable.
-- `cognee.remember(FeedbackEntry(...))` and `remember(TraceEntry(...))` for
-  user feedback and tool outcomes. `remember(SkillRunEntry(...))` after every
-  Rote play run. These entry types exist in `cognee.memory` today.
-- `cognee.recall(query_text=..., datasets=["candidate"])` for "what does this
-  person want" style questions from the agent, and specifically to build the
-  preference context the prediction step (section 5) runs against.
-- `cognee.export(dataset, format="json")` as the bridge to HydraDB (see below).
+- **One graph, five laptops.** Everyone reads and writes the same memory during
+  the build, so the demo graph is the graph we have been filling all day.
+- **RocketRide reaches it natively.** The `tool_cognee` node takes a `base_url`
+  and an `api_key` and speaks to Cognee Cloud directly. With a local library
+  this would have needed a tunnel from RocketRide staging to somebody's laptop.
+- **No model configuration at all.** The tenant owns its LLM and embedding
+  stack, so there is no Vertex project, no ADC token to expire mid-demo, and no
+  embedding dimension to keep in sync with a vector store.
+
+Routes we use, all verified against the live tenant on 2026-09-11:
+
+- `POST /api/v1/add_text` and `POST /api/v1/add` (multipart) for resume,
+  preferences and job descriptions.
+- `POST /api/v1/cognify` to build the graph. It takes a `graphModel` JSON
+  schema, which is how the typed entities (`Candidate`, `Skill`, `Job`,
+  `Company`, `Requirement`) get their labels instead of a generic `Entity`.
+  Typed labels are what make the HydraDB Cypher readable. Pass
+  `runInBackground: false` to block; a one-sentence dataset took ~17s.
+- `POST /api/v1/remember/entry` for typed memory. The body is discriminated on
+  `type` and the four shapes are exactly the ones this design assumes:
+  `qa`, `trace`, `feedback` and `skill_run`. `SkillRunEntry` carries
+  `selected_skill_id`, `task_text`, `result_summary`, `success_score`,
+  `latency_ms` and `tool_trace` — the Rote-play log, with no modelling work on
+  our side. `session_id` is required for qa/trace/feedback.
+- `POST /api/v1/recall` for "what does this person want", and specifically to
+  build the preference context the prediction step (section 5) runs against.
+  **Always pass `datasets`**: omitting it silently searches `default_dataset`
+  only. Before the first cognify it answers `memory_warming_up`, not an error.
+- `GET /api/v1/datasets/{id}/graph?full=true` returns `{nodes, edges}` — the
+  bridge to HydraDB (see below), with no export step and no file on disk.
+- `POST /api/v1/skills/` registers a SKILL.md body as a `Skill` node, and
+  `searchType: SKILLS` retrieves them. This is where `find_play` looks.
+- Free for the demo, not yet used: `GET /api/v1/visualize/*` (hosted graph
+  visualiser and live event stream) and `GET /api/v1/sessions/cost-by-model`
+  (per-model spend, a second source for the cost line in section 5).
+
+`searchType: CYPHER` and `NATURAL_LANGUAGE` are in the enum but untested on our
+tenant. Do not build the "why" story on them without checking first.
 
 ### HydraDB
 
@@ -82,16 +111,20 @@ below are Cypher. Rewriting them against `graph.relations` and `graph.subgraph`
 at hour 2 is not a trade we should be willing to make. Docker also unlocks the
 cleanest bridge story, below.
 
-Bridge from Cognee, in preference order:
+Bridge from Cognee — one option now, which is a simplification, not a loss:
 
-1. Spike (20 min): point Cognee's `neo4j` graph provider at HydraDB's Bolt
-   port. If auth works, Cognee writes to HydraDB directly and there is no bridge
-   code at all. This is the cleanest line we can give a judge. Only possible on
-   the Docker option; the cloud API exposes no Bolt port.
-2. Fallback (pre-written, ~40 lines): `cognee.export(format="json")`, then
-   `MERGE` nodes and edges over Bolt or HTTP. Run after every `remember`.
-   Deterministic and we control the labels. Cognee's `cypher` export exists too
-   but targets Neo4j syntax; do not depend on it.
+`GET /api/v1/datasets/{id}/graph?full=true` returns the whole graph as
+`{"nodes": [...], "edges": [...]}` with our typed labels on it. `MERGE` those
+over Bolt or HTTP after every `remember`. Roughly 40 lines, deterministic, and
+we control the labels.
+
+The old plan had a 20-minute spike to point Cognee's `neo4j` graph provider at
+HydraDB's Bolt port and skip the bridge entirely. **That is off the table on a
+managed tenant**: storage is Cognee's and no graph provider is configurable.
+Cut the spike from the schedule. The JSON sync was the pre-written fallback
+anyway, and the graph endpoint is a better version of it — no export call, no
+intermediate file, and a `query` + `neighborhood_depth` mode if we ever want to
+sync a subgraph instead of the lot.
 
 We stay **single-candidate**. Graph depth comes from routing through companies,
 skills, and outcomes rather than from a second person:
@@ -168,7 +201,8 @@ Findings from the local `.rocketride/` catalog:
 
 - `agent_rocketride` is a wave-planning agent that takes an `llm`, a `memory`
   node, and any number of `tool` nodes via invoke connections.
-- Native tool nodes we want: `tool_cognee` (talks to a Cognee server),
+- Native tool nodes we want: `tool_cognee` (point `base_url` at our tenant
+  and `api_key` at `COGNEE_API_KEY`; it sends `X-Api-Key` like we do),
   `db_hydradb` (cloud memory API), `tool_http_request` (URL whitelisted),
   `tool_python` (sandboxed), `tool_slack`, `tool_sheets`, `mcp_client` (stdio or
   streamable HTTP). `tool_docs`, `tool_calendar`, `tool_gmail` are additive only.
@@ -244,6 +278,12 @@ State both:
 - No auto-submission means no destructive outward action exists to be exploited.
 - `make security` runs `snyk test` and `snyk code test`. Dependencies pinned in
   a lock file, `.env` out of git (already done).
+- **Smallest dependency tree we can defend.** Moving Cognee to a managed tenant
+  took the `cognee` package (and litellm, lancedb, diskcache with it) out of the
+  build. That deleted the entire `.snyk` ignore list — five suppressed findings
+  with no upstream fix, all transitive under cognee. The project now tests clean
+  at 12 dependencies with an empty policy file, verified 2026-09-11. "We removed
+  the vulnerable subtree" is a better answer to a judge than "we justified it".
 
 Run the scan at hour 1, not hour 7. A high or critical finding discovered with
 an hour left is a score reduction we will not have time to fix.
@@ -371,8 +411,11 @@ Pre-event setup:
   **Blocking question, answer before hour 0:** does the cloud key run Cypher? If
   not, start the OSS engine in Docker and use that. Do not spend hour 2
   rewriting six queries.
-- Spike: Cognee `neo4j` provider against HydraDB Bolt. Timebox 20 minutes.
-  Pre-write the JSON export sync as fallback regardless. Only applies to Docker.
+- ~~Spike: Cognee `neo4j` provider against HydraDB Bolt.~~ **Dropped.** Cognee
+  is a managed tenant now and its storage is not configurable. Write the
+  `GET /datasets/{id}/graph` → `MERGE` sync directly; it was the fallback anyway.
+- ~~Cognee: pick a local LLM backend.~~ **Gone entirely.** The tenant owns its
+  model stack. `sh scripts/verify-setup.sh` proves the round trip.
 - ~~hotdata: create a database, load one CSV, run one query.~~ Done via REST:
   `scripts/hotdata-setup.sh` connects the Greenhouse board API as a `rest`
   datasource and loads 200 rows into `jobs.public.jobs`. Still open: the
@@ -408,7 +451,12 @@ pitch from hour 5.
 
 - **HydraDB cloud has no Cypher:** switch to OSS in Docker. Decided pre-event,
   not discovered at hour 2.
-- **Cognee to HydraDB direct write fails:** use the JSON sync. Same demo.
+- **Cognee to HydraDB sync is slower than expected:** sync a subgraph instead
+  of the whole graph — the graph endpoint takes `query` and `neighborhood_depth`.
+- **Cognee Cloud outage or quota exhaustion:** quota is 1.07 GB and a text-only
+  corpus will not come close, but the tenant is a single point of failure that a
+  local library was not. Mitigation is the HydraDB copy: once the sync has run,
+  every demo query except fresh ingestion reads from HydraDB anyway.
 - **RocketRide agent to tool wiring is undocumented:** fall back to
   `agent_langchain` with the same `mcp_client`. Keep a local Python driver of the
   same MCP tools as a debugging harness, never as the demo path, since judges
@@ -429,7 +477,7 @@ pitch from hour 5.
 
 ```
 agent/            # canonical schema, ATS fetchers, virtual clock, ranking merge
-memory/           # cognee graph model, remember helpers, hydra sync + cypher
+memory/           # cognee cloud client, graph model, remember helpers, hydra sync + cypher
 insight/          # hotdata client, table loaders, queries, corpus build
 mcp_server/       # FastMCP server exposing the tools above plus rote wrappers
 rocketride/       # pipeline .pipe JSON and node configs

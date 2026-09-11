@@ -2,7 +2,7 @@
 # Check the five hackathon prerequisites end to end, against the live services.
 #
 #   sh scripts/verify-setup.sh              # all five
-#   SKIP_COGNEE=1 sh scripts/verify-setup.sh   # skip the slow one (~40s)
+#   SKIP_COGNEE=1 sh scripts/verify-setup.sh   # skip the slow one (~35s)
 #
 # Every check makes a real call. Nothing here trusts a key just because it is
 # present in .env.
@@ -103,31 +103,49 @@ else
   fi
 fi
 
-# 4. Cognee ------------------------------------------------------------------
-head_ "4. Cognee.ai"
-if ! "$PY" -c 'import cognee' 2>/dev/null; then
-  fail "cognee not importable (pip install -r requirements.txt)"
-elif [ -n "${SKIP_COGNEE:-}" ]; then
-  pass "SDK installed"
-  warn "ingest skipped (SKIP_COGNEE set)"
+# 4. Cognee Cloud -------------------------------------------------------------
+head_ "4. Cognee.ai (cloud tenant)"
+CG_URL="$(envval COGNEE_BASE_URL)"
+CG_KEY="$(envval COGNEE_API_KEY)"
+if [ -z "$CG_URL" ] || [ -z "$CG_KEY" ]; then
+  fail "COGNEE_BASE_URL / COGNEE_API_KEY missing from .env"
+elif ! "$PY" -c 'import httpx' 2>/dev/null; then
+  fail "httpx not installed (pip install -r requirements.txt)"
 else
-  printf '  running a real ingest, this takes ~40s\n'
-  out="$("$PY" - <<'EOF' 2>/dev/null
-import asyncio, cognee
-from cognee.api.v1.search import SearchType
-
-async def main():
-    await cognee.add("Ada Lovelace wrote the first computer program in 1843.")
-    await cognee.cognify()
-    hits = await cognee.search(query_type=SearchType.GRAPH_COMPLETION,
-                               query_text="Who wrote the first computer program?")
-    print("ADA" if any("Ada" in str(h) for h in hits) else "MISS")
-
-asyncio.run(main())
+  # A 200 on a key-authenticated route proves tenant + key together. Bearer is
+  # not accepted, so this also catches a key pasted into the wrong header.
+  out="$("$PY" - <<'EOF' 2>&1
+from memory.cognee_client import CogneeCloud
+try:
+    with CogneeCloud() as c:
+        used = c.quota()["storageUsedInBytes"]
+        print(f"OK {len(c.datasets())} dataset(s), {used/1e6:.1f} MB stored")
+except Exception as e:
+    print("ERR " + str(e)[:140])
 EOF
 )"
-  [ "$out" = "ADA" ] && pass "add + cognify + search round trip" \
-                     || fail "ingest did not return the expected answer (check LLM creds; Vertex needs a live ADC token)"
+  case "$out" in
+    OK*) pass "tenant authenticates: ${out#OK }" ;;
+    *)   fail "${out}" ;;
+  esac
+
+  if [ -n "${SKIP_COGNEE:-}" ]; then
+    warn "ingest skipped (SKIP_COGNEE set)"
+  else
+    printf '  running a real ingest against the tenant, this takes ~35s\n'
+    out="$("$PY" - <<'EOF' 2>/dev/null
+from memory.cognee_client import CogneeCloud
+with CogneeCloud(dataset="verify-setup") as c:
+    c.add_text("Ada Lovelace wrote the first computer program in 1843.")
+    c.cognify(wait=True)
+    hits = c.search("Who wrote the first computer program?")
+    print("ADA" if "Ada" in str(hits) else "MISS")
+    c.delete_dataset(c.dataset_id())
+EOF
+)"
+    [ "$out" = "ADA" ] && pass "add + cognify + search round trip on the tenant" \
+                       || fail "round trip did not return the expected answer ($out)"
+  fi
 fi
 
 # 5. Rote --------------------------------------------------------------------

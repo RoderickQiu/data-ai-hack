@@ -1,11 +1,13 @@
 # Python dependencies. Install with:  pip install -r requirements.txt
-# Python 3.10 to 3.14 (cognee does not support 3.15 yet).
+# Any Python 3.10+. The 3.14 ceiling is gone: cognee is no longer installed
+# locally, so its version constraints no longer apply to this repo.
 
-# Knowledge-graph memory layer. Pulls in litellm, lancedb, ladybug, sqlalchemy, etc.
-cognee==1.5.4
-
-# Only needed for Option A (Vertex AI / Gemini). Harmless to install for Option B.
-google-cloud-aiplatform==2.1.0
+# Cognee runs as a managed cloud tenant and is reached over plain HTTP - see
+# memory/cognee_client.py. The `cognee` package (~500 MB with litellm, lancedb,
+# ladybug) is deliberately NOT a dependency. The lightweight `cognee-sdk` on
+# PyPI does not fit either: it authenticates with Authorization: Bearer, which
+# our tenant rejects with 401, and it exposes no remember/recall/skills routes.
+httpx==0.28.1
 
 # HydraDB cloud client. The package is hydradb-sdk, the module is hydra_db.
 hydradb-sdk==2.1.4

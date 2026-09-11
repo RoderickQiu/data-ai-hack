@@ -1,43 +1,16 @@
 # Snyk (https://snyk.io) policy file.
-# All five ignores below are transitive or unpatchable findings in cognee 1.5.4,
-# the newest release. None has an upstream fix, and none is reachable from this
-# project, which uses cognee as an in-process library and never starts the
-# cognee API server or a litellm proxy. Every ignore expires so it is re-checked.
+#
+# Empty on purpose. The five ignores that used to live here were all transitive
+# findings under cognee 1.5.4 (the cognee notebook exec endpoint, diskcache's
+# pickle.load, and three litellm proxy-server issues), none with an upstream fix.
+# Cognee now runs as a managed cloud tenant and the package is no longer a
+# dependency, so the whole subtree - and every finding under it - is gone.
+#
+# Verified 2026-09-11 with the policy file moved aside:
+#   snyk test --file=requirements.txt --package-manager=pip --command=.venv/bin/python
+#   -> 12 dependencies tested, no vulnerable paths found.
+#
+# Add a new ignore only with a reason and an expiry, so it gets re-checked.
 version: v1.25.0
-ignore:
-  SNYK-PYTHON-COGNEE-17675444:
-    - '*':
-        reason: >-
-          Notebook cell exec endpoint. Removed upstream before 1.5.4: the
-          installed package has no notebooks API (only leftover alembic
-          migrations mention notebooks) and its sole exec() call is graph-model
-          codegen from our own pydantic classes. We also never run the cognee
-          HTTP server; cognee is called in-process (add/cognify/search/remember/recall).
-        expires: 2026-12-10T00:00:00.000Z
-  SNYK-PYTHON-DISKCACHE-15268422:
-    - '*':
-        reason: >-
-          pickle.load on cache files. Exploitable only by an attacker who
-          already has write access to the local cache directory. diskcache 5.6.3
-          is the latest release and no fixed version exists.
-        expires: 2026-12-10T00:00:00.000Z
-  SNYK-PYTHON-LITELLM-17391451:
-    - '*':
-        reason: >-
-          Session expiry bug in the litellm proxy server's authenticate_user.
-          We only use the litellm SDK via cognee; the proxy is never started.
-          No fixed version exists and cognee pins litellm<1.97.
-        expires: 2026-12-10T00:00:00.000Z
-  SNYK-PYTHON-LITELLM-17393717:
-    - '*':
-        reason: >-
-          Unauthenticated /sso/debug endpoints in the litellm proxy server.
-          Proxy never started in this project. No fixed version exists.
-        expires: 2026-12-10T00:00:00.000Z
-  SNYK-PYTHON-LITELLM-17393719:
-    - '*':
-        reason: >-
-          Session expiry in the litellm proxy server. Proxy never started in
-          this project. No fixed version exists.
-        expires: 2026-12-10T00:00:00.000Z
+ignore: {}
 patch: {}
