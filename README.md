@@ -1,15 +1,99 @@
-# data-ai-hack
+# the right job
 
-Knowledge-graph memory over our data using [Cognee Cloud](https://docs.cognee.ai/) —
-one managed tenant shared by the whole team, reached over REST. Nothing about the
-memory layer runs on your laptop, so there is no embedding stack to configure and no local
-graph to drift out of sync with everyone else's.
+**An agent that hunts for jobs on your behalf, and needs you less every day.**
 
-The full stack, in one line:
+## The problem
+
+A job search is the same work, every day, forever. Read the new postings. Decide
+which are worth your time. Work out whether you can honestly claim what they ask
+for. Write the application. Answer the same screening questions you answered last
+week — work authorisation, notice period, salary band — one more time.
+
+Every tool that helps with this starts from zero each morning. You teach it what
+you want by rejecting things, and tomorrow it has forgotten. The cost of the
+tenth application is the cost of the first, and so is the effort you put in.
+That is not a search problem. It is a memory problem.
+
+## What we built
+
+An agent that does the same loop every day and gets cheaper, sharper and quieter
+each time round.
+
+On day 1 it reasons out how to read a job board, guesses at your taste, asks you
+six questions and drafts one application. By day 16 it replays what already
+worked, predicts which roles you will keep before you tell it, asks nothing, and
+has earned the right to shortlist without checking first.
+
+Three things have to move together, or it is a cache with a chart:
+
+| | Day 1 | Day 16 |
+| --- | --- | --- |
+| **It costs less** — tokens per run | 14,820 | 1,180 |
+| **It needs you less** — questions asked | 6 | 0 |
+| **It knows you better** — decisions it called right | 53% | rising |
+
+Cheaper is the easy half. Needing you less is the half that makes it compound.
+
+Two rules hold it honest, and both are enforced in code rather than promised in
+a prompt:
+
+- **It never invents experience.** Tailoring means selecting and ordering claims
+  you have verified. Every factual sentence in a generated application carries a
+  citation to one, and a deterministic validator rejects the pack if one is
+  missing. Where a role wants something you cannot back up, the pack says so.
+- **It never applies for you.** It prepares, it logs, it hands you the result.
+  No autonomy level unlocks submission, ever.
+
+## How the five layers fit
+
+Each layer's output is the next one's input, and the loop closes on itself —
+which is what makes the thing compound rather than merely persist.
 
 ```
-cognee (memory) -> HydraDB (stores it) -> hotdata.dev (ad-hoc queries) -> RocketRide (acts) -> Rote (replays what worked)
+hotdata     what is new today, and how this role prices against 1,886 live postings
+   |
+HydraDB     how it relates to you: claim coverage, warm paths, what you rejected
+   |
+Cognee      what you have said you want, recalled as context
+   |
+predict     keep or skip per role, with a reason drawn from all three
+   |
+RocketRide  acts: ranked digest to Slack, apply-pack and tailored resume on request
+   |
+you         keep, skip, "not for me" with a reason, answer a question once
+   |
+   +--> back into all three, and tomorrow it ranks better and asks less
 ```
+
+| Sponsor | What it owns here | Where |
+| --- | --- | --- |
+| **[Cognee Cloud](https://docs.cognee.ai/)** | Turns messy text into typed entities. Resume, preference prose and feedback are cognified against a custom `graphModel`, so claims and skills come back as labelled nodes rather than a generic blob. One managed tenant, so five laptops share one memory. | `memory/cognee_client.py`, `memory/graph_model.py` |
+| **HydraDB** | The durable candidate graph — what *happened*, as opposed to what was *said*. Signals, outcomes, preference rules, the autonomy record. Written through on every human response, and `--pull` restores it onto a second machine. | `memory/graph.py`, `memory/writers.py` |
+| **hotdata.dev** | The firehose: 1,886 real postings from 19 companies across 3 ATS families, plus the `applications` and `runs` tables the chart is drawn from. SQL for hard filters, BM25 and vector search for the rest. | `insight/` |
+| **RocketRide** | Sequencing. Three pipelines — judge the day, build a pack, absorb a response — each split at the human gate so none ever blocks waiting for a click. | `rocketride/*.pipe`, `mcp_server/` |
+| **Modiqo Rote** | Muscle memory. A novel path is captured once and replayed after: `refresh-and-rank` and `apply-pack` are crystallised plays, and a fingerprint decides exact replay, partial replay, or reason from scratch. | `mcp_server/rote.py` |
+| **Snyk** | A gate, not a layer. Dependency and code scans at three checkpoints, and it caught a critical in a transitive pull from our PDF renderer. | `.snyk`, `make security` |
+
+Where you touch it: **Slack**. The digest, the buttons, the apply-pack, the
+tailored resume as a PDF, the preference prompt and the autonomy request all
+arrive there. `slack/` is that surface; `dashboard/` is the chart it produces.
+
+## What is real, and what is ours
+
+Worth stating before anyone asks:
+
+| | |
+| --- | --- |
+| The jobs — companies, titles, descriptions, requirements | **Real**, pulled from public ATS APIs at hour 0 |
+| The release schedule — which job it sees on which day | **Ours**, a replay order over a frozen corpus |
+| Every number on the chart | **Real**, logged by runs that happened — 71 runs, 172 responses |
+
+The schedule is the only synthetic element. It changes what the agent *sees*,
+never what it *does*, and no metric depends on it being true.
+
+---
+
+The rest of this file is how to run it.
 
 ## Team checklist: every teammate does this once
 
@@ -138,7 +222,7 @@ insight/    hotdata client, the named SQL, the three tables, the corpus projecti
 mcp_server/ FastMCP server and the Rote wrapper
 rocketride/ the three pipelines as .pipe files, the task client, and a CLI
 demo/       the timed loop driver and the three-line chart
-tests/      78 offline tests — no network, no credentials
+tests/      143 offline tests — no network, no credentials
 ```
 
 ### Getting it running
