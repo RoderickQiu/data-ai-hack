@@ -1,0 +1,161 @@
+"""Running the Slack surface against the real agent instead of fixtures.
+
+    python -m slack.slackbot.live --day          # judge one day and post the digest
+    python -m slack.slackbot.live --claims       # post whatever is awaiting verification
+
+The bot process itself picks this up through :class:`BackendSink`: with
+``SLACK_BACKEND=1`` set, every click stops at the JSONL file *and* goes on into
+``agent.feedback``. Without it the surface behaves exactly as it did against
+fixtures, which is what keeps it demonstrable when the stores are down.
+
+The loop closes here. A ``not for me`` is written, the induction runs on the way
+out, and if three answers now share a reason the Confirm prompt is posted from
+inside the same click — because a preference that appears a minute later reads
+as a coincidence rather than as the agent having just learned something.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import urllib.error
+import urllib.request
+from typing import Any, Mapping
+
+from . import bridge
+from .config import Config, load_config
+from .handlers import SLATES
+from .signals import Signal, SignalSink
+
+
+class BackendSink(SignalSink):
+    """The sink, plus the write into the agent's memory.
+
+    Disk first, always: ``agent.feedback`` can raise, the stores can be down,
+    and a click that is only half-recorded is worse than one that is recorded
+    twice. The JSONL line is written before anything else is attempted, so the
+    human-effort line of the chart survives any failure below it.
+    """
+
+    def __init__(self, cfg: "Config", *, store, insight, remember=None):
+        super().__init__(cfg.signal_log, cfg.signal_webhook, cfg.signal_webhook_token)
+        self.cfg = cfg
+        self.store = store
+        self.insight = insight
+        self.remember = remember
+
+    def emit(self, signal: Signal) -> dict[str, Any]:
+        record = super().emit(signal)
+        try:
+            result = bridge.apply_signal(
+                record, store=self.store, insight=self.insight,
+                remember=self.remember,
+                predictions=SLATES.get(record.get("run_id") or "", {}),
+            )
+        except Exception as exc:
+            print(f"[backend] {record.get('kind')} not written, it is still in "
+                  f"{self.log_path}: {type(exc).__name__}: {exc}")
+            return record
+
+        self._follow_up(record, result)
+        return record
+
+    def _follow_up(self, record: Mapping[str, Any], result: Mapping[str, Any]) -> None:
+        """Whatever that click set in motion, do it now rather than next tick."""
+        try:
+            for hypothesis in result.get("preference_hypotheses") or []:
+                call(self.cfg, "/preference", bridge.preference_payload(
+                    hypothesis, run_id=record.get("run_id") or "").model_dump())
+
+            if result.get("action") == "prepare_pack":
+                post_pack(self.cfg, self.insight, self.store,
+                          result["job_id"], result["day"], run_id=result["run_id"])
+        except Exception as exc:
+            print(f"[backend] follow-up after {record.get('kind')} failed: "
+                  f"{type(exc).__name__}: {exc}")
+
+
+def call(cfg: Config, path: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Post to the bot's own API — the same path a RocketRide pipeline takes."""
+    request = urllib.request.Request(
+        f"http://{cfg.api_host}:{cfg.api_port}{path}",
+        data=json.dumps(payload, default=str).encode(),
+        headers={"Content-Type": "application/json",
+                 "Authorization": f"Bearer {cfg.api_token}"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=60) as response:
+        return json.loads(response.read())
+
+
+def post_day(cfg: Config, insight, store, clock=None, advance: bool = True) -> dict[str, Any]:
+    """P-A, then the digest, then the autonomy prompt if one is due."""
+    from agent.pipeline import judge_the_day
+    from memory.autonomy import D1_SHORTLIST, evaluate
+
+    result = judge_the_day(insight, store, clock, advance=advance)
+    posted = call(cfg, "/digest", bridge.digest_payload(result).model_dump())
+
+    prompt = bridge.autonomy_payload(evaluate(store, D1_SHORTLIST), run_id=result.run_id)
+    if prompt is not None:
+        call(cfg, "/autonomy", prompt.model_dump())
+
+    return {"run_id": result.run_id, "day": result.day,
+            "shown": len(result.rank.slate), "mode": result.metrics.mode,
+            "ts": posted.get("ts"), "autonomy_prompt": prompt is not None}
+
+
+def post_pack(cfg: Config, insight, store, job_id: str, day: int,
+              questions=(), run_id: str = "") -> dict[str, Any]:
+    """P-B. Called when the human taps *Prepare pack*."""
+    from agent.pipeline import prepare_pack
+
+    pack, metrics = prepare_pack(insight, store, job_id, day, screening_questions=questions)
+    payload = bridge.pack_payload(pack, run_id=run_id or metrics.run_id,
+                                  play=metrics.mode.replace("_", " "))
+    return call(cfg, "/pack", payload.model_dump())
+
+
+def post_pending_claims(cfg: Config, store, run_id: str = "verify") -> dict[str, Any]:
+    from memory.claims import pending_verification
+
+    rows = pending_verification(store)
+    if not rows:
+        return {"claims": 0}
+    payload = bridge.claims_payload(rows, run_id=run_id)
+    return {"claims": len(rows), **call(cfg, "/claims", payload.model_dump())}
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Drive the Slack surface from the real agent.")
+    parser.add_argument("--day", action="store_true", help="judge one day and post the digest")
+    parser.add_argument("--claims", action="store_true", help="post claims awaiting verification")
+    parser.add_argument("--pack", metavar="JOB_ID", help="build and post one apply-pack")
+    parser.add_argument("--no-advance", action="store_true", help="re-judge the current day")
+    args = parser.parse_args()
+
+    if not (args.day or args.claims or args.pack):
+        parser.error("nothing to do; pass --day, --claims or --pack JOB_ID")
+
+    from agent.clock import DayClock
+    from insight.store import Insight
+    from memory.graph import GraphStore
+
+    cfg = load_config()
+    insight, store, clock = Insight(), GraphStore(), DayClock.load()
+
+    try:
+        if args.day:
+            print(json.dumps(post_day(cfg, insight, store, clock,
+                                      advance=not args.no_advance), indent=2))
+        if args.pack:
+            print(json.dumps(post_pack(cfg, insight, store, args.pack, clock.day), indent=2))
+        if args.claims:
+            print(json.dumps(post_pending_claims(cfg, store), indent=2))
+    except urllib.error.URLError as exc:
+        raise SystemExit(f"cannot reach the bot on {cfg.api_host}:{cfg.api_port} — "
+                         f"is `python -m slack.slackbot.app` running? ({exc})")
+
+
+if __name__ == "__main__":
+    main()

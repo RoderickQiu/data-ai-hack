@@ -8,6 +8,13 @@ from .schemas import PackIn
 from .signals import Signal, SignalSink
 
 PACKS: dict[str, PackIn] = {}
+# run_id -> {job_id: predicted}. A prediction that is never resolved against the
+# human's actual answer is not evidence of anything, so the digest stashes what
+# it guessed and every click closes the loop on it.
+SLATES: dict[str, dict[str, str]] = {}
+# question_id -> the question as asked. agent.feedback.answer_question keys a
+# StandardAnswer off the wording, not off our id, so the text has to travel.
+QUESTIONS: dict[str, str] = {}
 
 
 def _val(body: dict[str, Any]) -> dict[str, Any]:
@@ -114,7 +121,9 @@ def register(app: App, sink: SignalSink) -> None:
                     run_id=meta["r"],
                     job_id=meta["j"],
                     slack_user=body["user"]["id"],
-                    payload={"question_id": question_id, "answer": text},
+                    payload={"question_id": question_id,
+                             "question": QUESTIONS.get(question_id, ""),
+                             "answer": text},
                 )
             )
         client.chat_postMessage(
@@ -142,7 +151,9 @@ def register(app: App, sink: SignalSink) -> None:
                 run_id=v.get("r"),
                 job_id=v.get("j"),
                 slack_user=body["user"]["id"],
-                payload={"question_id": v.get("q"), "answer": answer},
+                payload={"question_id": v.get("q"),
+                     "question": QUESTIONS.get(v.get("q"), v.get("text", "")),
+                     "answer": answer},
             )
         )
         client.chat_postMessage(channel=v["ch"], thread_ts=v["ts"], text=":brain: Saved. I won't ask again.")

@@ -5,7 +5,7 @@ from slack_sdk import WebClient
 
 from . import blocks as B
 from .config import Config
-from .handlers import PACKS
+from .handlers import PACKS, QUESTIONS, SLATES
 from .schemas import AutonomyIn, ClaimsIn, DigestIn, PackIn, PostedOut, PreferenceIn, QuestionIn
 
 
@@ -40,11 +40,13 @@ def create_api(client: WebClient, cfg: Config) -> FastAPI:
 
     @guarded.post("/digest", response_model=PostedOut)
     def digest(d: DigestIn) -> PostedOut:
+        SLATES[d.run_id] = {j.job_id: j.prediction for j in d.jobs if j.prediction}
         return post(d.channel, B.digest_message(d), f"Day {d.day}: {len(d.jobs)} roles for you")
 
     @guarded.post("/pack", response_model=PostedOut)
     def pack(p: PackIn) -> PostedOut:
         PACKS[p.job_id] = p
+        QUESTIONS.update({q.question_id: q.text for q in p.questions})
         blocks, attachments = B.pack_message(p)
         return post(p.channel, blocks, f"Apply pack: {p.title} at {p.company}", attachments)
 
@@ -62,6 +64,7 @@ def create_api(client: WebClient, cfg: Config) -> FastAPI:
 
     @guarded.post("/question", response_model=PostedOut)
     def question(q: QuestionIn) -> PostedOut:
+        QUESTIONS[q.question_id] = q.text
         return post(q.channel, B.question_message(q), q.text)
 
     api.include_router(guarded)
