@@ -12,14 +12,17 @@ would be a bug.
 
 from __future__ import annotations
 
-import json
 import tempfile
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
+import pyarrow as pa
+import pyarrow.parquet as pq
+
 from agent.config import TUNABLES, Settings
 from agent.schema import (
     APPLICATIONS_COLUMNS,
+    COLUMN_TYPES,
     JOBS_COLUMNS,
     RUNS_COLUMNS,
     ApplicationEvent,
@@ -27,6 +30,50 @@ from agent.schema import (
 )
 from insight.hotdata import Hotdata, HotdataError
 from insight.queries import bind_catalog, catalogue
+
+_ARROW = {"int": pa.int64(), "float": pa.float64(), "bool": pa.bool_(),
+          "str": pa.string()}
+
+
+def _write_parquet(payload: Sequence[Mapping[str, Any]], columns: Sequence[str],
+                   types: Mapping[str, str] = COLUMN_TYPES) -> Path:
+    """Write the rows to parquet, with the column types declared rather than
+    inferred.
+
+    A JSON or CSV upload carries no types, so hotdata infers them per file and a
+    column that happens to be null in every row of *this* file infers as varchar
+    — which an existing float64 or int64 column then rejects. Parquet carries
+    its own schema, so the null arrives as a typed null (agent/schema.py).
+    """
+    schema = pa.schema([
+        pa.field(column, _ARROW[types.get(column, "str")]) for column in columns
+    ])
+    rows = [
+        {column: _coerce(row.get(column), types.get(column, "str"))
+         for column in columns}
+        for row in payload
+    ]
+    handle = tempfile.NamedTemporaryFile("wb", suffix=".parquet", delete=False)
+    handle.close()
+    path = Path(handle.name)
+    pq.write_table(pa.Table.from_pylist(rows, schema=schema), path)
+    return path
+
+
+def _coerce(value: Any, kind: str) -> Any:
+    """None stays None — that is the whole point. Everything else is made to
+    match the declared type, because pyarrow raises on a mismatch where the old
+    JSON path would have silently retyped the column."""
+    if value is None:
+        return None
+    if kind == "str":
+        return value if isinstance(value, str) else str(value)
+    if kind == "bool":
+        return bool(value)
+    try:
+        return int(value) if kind == "int" else float(value)
+    except (TypeError, ValueError):
+        return None
 
 # Index names are derived from the table, so pointing HOTDATA_JOBS_TABLE at a
 # scratch copy does not collide with the team's indexes.
@@ -149,9 +196,7 @@ class Insight:
     def _load_rows(self, table: str, rows: Sequence[Mapping[str, Any]],
                    columns: Sequence[str], mode: str, key: str | None) -> dict[str, Any]:
         payload = [{column: row.get(column) for column in columns} for row in rows]
-        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
-            json.dump(payload, handle, default=str)
-            path = Path(handle.name)
+        path = _write_parquet(payload, columns, COLUMN_TYPES)
         try:
             result = self.client.load_file(path, table=table, mode=mode, key=key)
         except HotdataError as exc:

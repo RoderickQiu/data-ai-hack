@@ -40,8 +40,10 @@ surface for ``snyk code test`` to find.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import threading
+import time
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Iterable, Mapping
 
@@ -517,6 +519,56 @@ def _recent_signals(graph: Graph, params: dict[str, Any]) -> list[dict[str, Any]
 
 
 @_register(
+    "current_slate",
+    """MATCH (c:Candidate {candidate_id:$candidate_id})-[p:PREDICTED_KEEP]->(j:Job)
+       WHERE p.actual IS NULL AND p.predicted IS NOT NULL
+         AND ($day = 0 OR p.day = $day)
+       RETURN j.id AS job_id, j.title AS title, j.company AS company, j.url AS url,
+              j.location AS location, j.remote AS remote, j.salary_min AS salary_min,
+              j.salary_max AS salary_max, j.company_size AS company_size,
+              j.seniority AS seniority, p.predicted AS predicted, p.score AS score,
+              p.reasons AS reasons, p.day AS day
+       ORDER BY p.day DESC, p.score DESC""",
+    ("candidate_id", "day"),
+    "The slate the human has not answered yet — what the digest is showing right "
+    "now. The mirror of agreement_record, which deliberately returns only "
+    "resolved predictions.",
+)
+def _current_slate(graph: Graph, params: dict[str, Any]) -> list[dict[str, Any]]:
+    candidate = _cand(params)
+    rows = []
+    for edge in graph.out(candidate, "PREDICTED_KEEP"):
+        # Unresolved only. An edge that has an `actual` belongs to the agreement
+        # record, not to today's slate.
+        if edge.props.get("actual") or not edge.props.get("predicted"):
+            continue
+        job = graph.props(edge.dst)
+        rows.append({
+            "job_id": job.get("id", edge.dst), "title": job.get("title", ""),
+            "company": job.get("company", ""), "url": job.get("url", ""),
+            "location": job.get("location", ""), "remote": job.get("remote"),
+            "salary_min": job.get("salary_min"), "salary_max": job.get("salary_max"),
+            "company_size": job.get("company_size"), "seniority": job.get("seniority"),
+            "predicted": edge.props.get("predicted"),
+            "score": edge.props.get("score"),
+            # Written by record_prediction once the reasons are persisted; absent
+            # on every edge older than that, which the reader handles.
+            "reasons": edge.props.get("reasons") or [],
+            "day": edge.props.get("day"),
+        })
+    # `day = 0` means "whatever the latest slate is", so a caller that does not
+    # track the clock still gets one day's worth rather than every open
+    # prediction ever made.
+    wanted = params.get("day") or 0
+    if not wanted:
+        days = [row["day"] for row in rows if row["day"] is not None]
+        wanted = max(days) if days else 0
+    rows = [row for row in rows if not wanted or row["day"] == wanted]
+    rows.sort(key=lambda row: -(row["score"] or 0))
+    return rows
+
+
+@_register(
     "agreement_record",
     """MATCH (c:Candidate {candidate_id:$candidate_id})-[p:PREDICTED_KEEP]->(j:Job)
        WHERE p.actual IS NOT NULL AND p.predicted IS NOT NULL
@@ -640,6 +692,8 @@ class LocalBackend:
         self.mirror = mirror
         self._dirty: list[tuple[str, Any]] = []
         self._lock = threading.Lock()
+        self._pusher: threading.Thread | None = None
+        self._last_push: dict[str, Any] = {"pushed": 0, "state": "not yet pushed"}
 
     def run(self, name: str, params: Mapping[str, Any]) -> list[dict[str, Any]]:
         query = _REGISTRY[name]
@@ -655,15 +709,50 @@ class LocalBackend:
             self.graph.merge_edge(src, type_, dst, **props)
             self._dirty.append(("edge", (src, type_, dst)))
 
-    def flush(self) -> dict[str, Any]:
+    def flush(self, wait: bool = False) -> dict[str, Any]:
+        """Persist locally, then mirror to HydraDB off the request path.
+
+        The local write is the truth a run reads back, so it is synchronous. The
+        HydraDB push is the durable copy and the team's view — and it was 5.6s
+        of an 8s ranking pass, on the one call whose length decides whether the
+        orchestrator's turn survives. It runs on a worker thread instead, and
+        the *previous* flush's outcome is reported on the next one, so a mirror
+        that has been failing all afternoon is still visible rather than
+        swallowed. ``wait=True`` for callers that need the push to have landed.
+        """
         with self._lock:
             dirty, self._dirty = self._dirty, []
         path = state_path(GRAPH_FILE)
         path.write_text(json.dumps(self.graph.to_dict(), indent=1, default=str))
         result: dict[str, Any] = {"local": str(path), "changed": len(dirty)}
         if self.mirror and dirty:
-            result["hydradb"] = self.mirror.push(self.graph, dirty)
+            self._push_async(dirty)
+            if wait:
+                self.wait_for_mirror()
+            result["hydradb"] = dict(self._last_push)
         return result
+
+    def _push_async(self, dirty: list[tuple[str, Any]]) -> None:
+        def work() -> None:
+            try:
+                outcome = self.mirror.push(self.graph, dirty)
+            except Exception as exc:  # noqa: BLE001 - any client error, same answer
+                outcome = {"pushed": 0, "error": f"{type(exc).__name__}: {exc}"}
+            self._last_push = outcome
+
+        # One worker at a time: two concurrent pushes of the same graph race on
+        # the same ids, and the budget is per-request anyway.
+        self.wait_for_mirror()
+        self._pusher = threading.Thread(target=work, daemon=True,
+                                        name="hydradb-mirror")
+        self._pusher.start()
+
+    def wait_for_mirror(self, timeout: float = 60.0) -> dict[str, Any]:
+        """Block until the mirror thread is done. For scripts and tests."""
+        pusher = getattr(self, "_pusher", None)
+        if pusher is not None and pusher.is_alive():
+            pusher.join(timeout)
+        return dict(self._last_push)
 
 
 class BoltBackend:
@@ -721,6 +810,57 @@ def _flatten(props: Mapping[str, Any]) -> dict[str, Any]:
     return out
 
 
+# HydraDB rejects a memory id over 100 bytes ("source_id length 105 exceeds
+# maximum of 100 bytes"), and an edge id is `src|TYPE|dst` — three ATS job ids'
+# worth of string. The natural id is kept in `metadata` either way, and `pull`
+# reads the id from there, so shortening the key costs nothing on the way back.
+HYDRA_ID_MAX = 100
+
+
+# HydraDB caps metadata at 16 KiB per item. A job's props carry a description
+# that can be longer than that on its own, and one oversized item rejects the
+# whole batch — so the props are trimmed here rather than discovered at ingest.
+HYDRA_METADATA_MAX = 15_000
+
+# `context.list` rejects a page over 100 rather than clamping it.
+HYDRA_PAGE_MAX = 100
+
+# Ingest is billed per request against a budget of 5000, and one over-budget
+# request rejects every item in it. 50 is the starting guess, halved on
+# rejection; the pause is for the per-second half of the same budget.
+HYDRA_BATCH_ITEMS = 50
+HYDRA_BATCH_PAUSE = 0.2
+
+
+def _props_for_metadata(props: Mapping[str, Any]) -> str:
+    """The props as they have to travel to survive the round trip.
+
+    JSON-encoded, because metadata values are scalars, and truncated to fit the
+    item cap: a key dropped for length is better than a batch that never lands.
+    Longest values go first, since one description is usually the whole problem.
+    """
+    trimmed = dict(props)
+    while trimmed and len(json.dumps(trimmed, default=str)) > HYDRA_METADATA_MAX:
+        longest = max(trimmed, key=lambda k: len(str(trimmed[k])))
+        trimmed.pop(longest)
+    # Encoded, not handed over as a dict: HydraDB rejects a metadata value more
+    # than one level deep ("unsupported metadata value at metadata.props.reasons:
+    # maximum nesting depth is 1"), and `reasons` on a PREDICTED_KEEP edge is a
+    # list — so the natural shape 400s the *whole batch*, which is the same
+    # all-or-nothing failure the id cap was about. `pull` decodes it back.
+    return json.dumps(trimmed, default=str)
+
+
+def _item_id(natural: str) -> str:
+    """The natural id when it fits, otherwise a truncation plus a digest of the
+    whole thing — still stable, so a re-push upserts rather than duplicating."""
+    if len(natural.encode()) <= HYDRA_ID_MAX:
+        return natural
+    digest = hashlib.sha1(natural.encode()).hexdigest()[:16]
+    head = natural.encode()[: HYDRA_ID_MAX - len(digest) - 1].decode(errors="ignore")
+    return f"{head}-{digest}"
+
+
 class HydraMirror:
     """Write the graph through to HydraDB cloud as memory items.
 
@@ -751,36 +891,67 @@ class HydraMirror:
                 if node is None:
                     continue
                 items.append({
-                    "id": node.id,
+                    "id": _item_id(node.id),
                     "text": f"{node.label} {node.id} :: " + json.dumps(node.props, default=str)[:1500],
-                    "metadata": {"kind": "node", "label": node.label, "node_id": node.id},
+                    "metadata": {"kind": "node", "label": node.label, "node_id": node.id,
+                                 "props": _props_for_metadata(node.props)},
                 })
             else:
                 edge = graph.edges.get(key)
                 if edge is None:
                     continue
                 items.append({
-                    "id": f"{edge.src}|{edge.type}|{edge.dst}",
+                    "id": _item_id(f"{edge.src}|{edge.type}|{edge.dst}"),
                     "text": f"{edge.src} {edge.type} {edge.dst} :: "
                             + json.dumps(edge.props, default=str)[:1000],
                     "metadata": {"kind": "edge", "type": edge.type,
-                                 "src": edge.src, "dst": edge.dst},
+                                 "src": edge.src, "dst": edge.dst,
+                                 "props": _props_for_metadata(edge.props)},
                 })
         if not items:
             return {"pushed": 0}
         # Deduplicate: a run touches the same node many times.
         unique = {item["id"]: item for item in items}
         payload = list(unique.values())
-        self.client.context.ingest(
-            database=self.database, collection=self.collection, type="memory",
-            memories=json.dumps(payload, default=str), upsert="true",
-        )
-        return {"pushed": len(payload), "database": self.database,
-                "collection": self.collection}
+        pushed = self._ingest(payload)
+        return {"pushed": pushed, "batches": -(-len(payload) // HYDRA_BATCH_ITEMS),
+                "database": self.database, "collection": self.collection}
 
-    def pull(self, page_size: int = 200, max_pages: int = 50) -> Graph:
-        """Rebuild the graph from HydraDB. The disaster-recovery path."""
+    def _ingest(self, payload: list[dict[str, Any]], size: int = HYDRA_BATCH_ITEMS) -> int:
+        """Ingest in batches, halving on a too-large rejection.
+
+        HydraDB bills a request against a per-request budget it does not publish
+        per item ("combined cost 51018 exceeds the per-request budget of 5000"),
+        so the batch size cannot be computed up front — a batch of long job
+        descriptions costs many times a batch of requirement nodes. Halving on
+        rejection finds the size this particular payload allows, and the whole
+        push is otherwise a single item over the line away from landing nothing.
+        """
+        pushed = 0
+        for start in range(0, len(payload), size):
+            batch = payload[start:start + size]
+            try:
+                self.client.context.ingest(
+                    database=self.database, collection=self.collection, type="memory",
+                    memories=json.dumps(batch, default=str), upsert="true",
+                )
+                pushed += len(batch)
+            except Exception as exc:
+                if "too large" not in str(exc) or len(batch) == 1:
+                    raise
+                pushed += self._ingest(batch, max(1, size // 2))
+            time.sleep(HYDRA_BATCH_PAUSE)
+        return pushed
+
+    def pull(self, page_size: int = HYDRA_PAGE_MAX, max_pages: int = 200) -> Graph:
+        """Rebuild the graph from HydraDB. The disaster-recovery path.
+
+        ``page_size`` is clamped: HydraDB rejects anything over 100 outright,
+        and the default used to be 200 — so the recovery path failed on its
+        first call, which is the worst possible time to find out.
+        """
         graph = Graph()
+        page_size = max(1, min(page_size, HYDRA_PAGE_MAX))
         page = 1
         while page <= max_pages:
             response = self.client.context.list(
@@ -790,11 +961,18 @@ class HydraMirror:
             items = response.data.user_memories or []
             for item in items:
                 meta = item.metadata or {}
-                text = getattr(item, "description", "") or ""
-                _, _, blob = text.partition(" :: ")
-                try:
-                    props = json.loads(blob) if blob else {}
-                except json.JSONDecodeError:
+                # `text` is what HydraDB indexes, not what it hands back:
+                # `context.list` returns `description` empty on every item, so
+                # parsing the props out of it restored the topology with every
+                # node blank. `metadata` does round-trip, so that is where the
+                # props are read from — and written to, in `push`.
+                props = meta.get("props")
+                if isinstance(props, str):
+                    try:
+                        props = json.loads(props)
+                    except json.JSONDecodeError:
+                        props = {}
+                if not isinstance(props, dict):
                     props = {}
                 if meta.get("kind") == "node":
                     graph.merge_node(meta["node_id"], meta.get("label", ""), **props)
@@ -860,8 +1038,12 @@ class GraphStore:
     def merge_edge(self, src: str, type_: str, dst: str, **props: Any) -> None:
         self.backend.merge_edge(src, type_, dst, **props)
 
-    def flush(self) -> dict[str, Any]:
-        return self.backend.flush()
+    def flush(self, wait: bool = False) -> dict[str, Any]:
+        """``wait=True`` blocks on the HydraDB mirror; a run never needs to."""
+        backend = self.backend
+        if wait and isinstance(backend, LocalBackend):
+            return backend.flush(wait=True)
+        return backend.flush()
 
     @property
     def graph(self) -> Graph:
@@ -876,4 +1058,4 @@ class GraphStore:
 
 
 _DEFAULT_PARAMS = {"limit": 10, "job_ids": [], "question_ids": [], "cutoff_day": 0,
-                   "task_type": "apply-pack"}
+                   "task_type": "apply-pack", "day": 0}

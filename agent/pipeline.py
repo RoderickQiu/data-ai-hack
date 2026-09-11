@@ -19,6 +19,7 @@ that compounds.
 from __future__ import annotations
 
 import time
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
@@ -67,20 +68,63 @@ class DayResult:
         }
 
 
-def judge_the_day(insight: Insight, store: GraphStore, clock: DayClock | None = None,
-                  advance: bool = True, remember: Remember | None = None,
-                  plays: PlayIndex | None = None, title_like: str = "",
-                  location: str = "", remote_only: bool = False) -> DayResult:
-    """P-A. One day, one judgment pass, one row on the chart.
+@dataclass
+class DayPass:
+    """A P-A pass in flight, between the tool calls that carry it.
 
-    The pass covers today's releases **plus** every earlier role still unjudged,
-    because yesterday's memory changing today's ranking of a day-3 role is the
-    compounding — and it is visible without a single new row.
+    P-A is one logical pass, but the orchestrator's turn is not one call:
+    ``judge_day`` as a single tool ranks the pool and extracts requirements
+    inside one request, which is long enough that the agent's turn times out
+    and the run is lost after doing all of the work. So the pass is opened,
+    ranked and closed by three tools (DESIGN §4 keeps the *pipeline* split at
+    human gates; this is a split at the timeout, which is a different seam).
+
+    The state between them lives here rather than in the caller: the run_id, the
+    metrics counters and the play match all have to survive from `open` to
+    `close` or the row that lands is not the row that describes the run.
+    """
+    run_id: str
+    day: int
+    metrics: RunMetrics
+    match: Any
+    fingerprint: Any
+    started: float
+    result: DayResult | None = None
+
+
+# Passes are held by run_id between calls. Bounded, because an orchestrator that
+# opens a day and never closes it must not grow the server's memory — and
+# because a pass older than the current day is not resumable anyway.
+_OPEN_PASSES: "OrderedDict[str, DayPass]" = OrderedDict()
+MAX_OPEN_PASSES = 8
+
+
+def _remember_pass(pass_: DayPass) -> DayPass:
+    _OPEN_PASSES[pass_.run_id] = pass_
+    while len(_OPEN_PASSES) > MAX_OPEN_PASSES:
+        _OPEN_PASSES.popitem(last=False)
+    return pass_
+
+
+def open_pass(run_id: str) -> DayPass:
+    """The pass `day_rank` and `day_close` are talking about."""
+    pass_ = _OPEN_PASSES.get(run_id)
+    if pass_ is None:
+        raise KeyError(f"no open pass {run_id!r}; call day_open first "
+                       f"(open: {sorted(_OPEN_PASSES)})")
+    return pass_
+
+
+def open_day(store: GraphStore, clock: DayClock | None = None, advance: bool = True,
+             plays: PlayIndex | None = None) -> DayPass:
+    """Stage 1 of P-A: advance the clock and ask Rote for a play.
+
+    Deliberately cheap — a clock write and one play lookup. Nothing here touches
+    hotdata, so this call cannot be the one that times out.
     """
     clock = clock or DayClock.load()
     day = clock.advance() if advance else clock.day
-    metrics = RunMetrics(day=day)
-    started = time.monotonic()
+    metrics = RunMetrics(day=day, pipeline="P-A")
 
     plays = plays or PlayIndex(store, Rote())
     fingerprint = fingerprint_task("refresh-and-rank", REFRESH_INPUTS)
@@ -93,6 +137,21 @@ def judge_the_day(insight: Insight, store: GraphStore, clock: DayClock | None = 
     else:
         metrics.note_reasoned()
 
+    return _remember_pass(DayPass(run_id=metrics.run_id, day=day, metrics=metrics,
+                                  match=match, fingerprint=fingerprint,
+                                  started=time.monotonic()))
+
+
+def rank_day(pass_: DayPass, insight: Insight, store: GraphStore,
+             title_like: str = "", location: str = "",
+             remote_only: bool = False) -> DayResult:
+    """Stage 2 of P-A: the judgment itself. The long call, and the only one.
+
+    Covers today's releases **plus** every earlier role still unjudged, because
+    yesterday's memory changing today's ranking of a day-3 role is the
+    compounding — and it is visible without a single new row.
+    """
+    metrics, day = pass_.metrics, pass_.day
     result = refresh_and_rank(insight, store, day, title_like=title_like,
                               location=location, remote_only=remote_only)
     record_slate(store, result, metrics.run_id)
@@ -102,26 +161,57 @@ def judge_the_day(insight: Insight, store: GraphStore, clock: DayClock | None = 
     metrics.values_from_memory += result.rules_applied
 
     readiness = evaluate(store, D1_SHORTLIST)
-    prompt = readiness.prompt()
-
-    day_result = DayResult(
+    pass_.result = DayResult(
         run_id=metrics.run_id, day=day, rank=result, metrics=metrics,
         digest_text=render_text(day, rows), digest_blocks=render_blocks(day, rows),
-        autonomy_prompt=prompt, play=match.summary(),
+        autonomy_prompt=readiness.prompt(), play=pass_.match.summary(),
     )
+    return pass_.result
+
+
+def close_day(pass_: DayPass, insight: Insight, store: GraphStore,
+              remember: Remember | None = None,
+              plays: PlayIndex | None = None) -> DayResult:
+    """Stage 3 of P-A: the row on the chart, and the play that did the work.
+
+    Separate from `rank_day` so that a pass which ranked but timed out on the
+    way back still has somewhere to land: re-closing an already-closed pass is
+    the caller's to avoid, but re-opening a lost one costs the whole judgment.
+    """
+    if pass_.result is None:
+        raise ValueError(f"pass {pass_.run_id} has not ranked yet — call day_rank first")
+    plays = plays or PlayIndex(store, Rote())
+    match, metrics = pass_.match, pass_.metrics
 
     if match.mode == "none":
         # First run of this shape: the path we just took is what gets captured.
-        plays.register("refresh-and-rank-v1", "refresh-and-rank", fingerprint)
+        plays.register("refresh-and-rank-v1", "refresh-and-rank", pass_.fingerprint)
     elif match.play_id:
         plays.note_run(match.play_id, success=True)
 
     _write_skill_run(remember, match.play_id or "refresh-and-rank",
-                     f"judge day {day}", day_result.summary(),
-                     started, metrics)
+                     f"judge day {pass_.day}", pass_.result.summary(),
+                     pass_.started, metrics)
     insight.log_run(metrics.row())
     store.flush()
-    return day_result
+    _OPEN_PASSES.pop(pass_.run_id, None)
+    return pass_.result
+
+
+def judge_the_day(insight: Insight, store: GraphStore, clock: DayClock | None = None,
+                  advance: bool = True, remember: Remember | None = None,
+                  plays: PlayIndex | None = None, title_like: str = "",
+                  location: str = "", remote_only: bool = False) -> DayResult:
+    """P-A in one call: open, rank, close.
+
+    The in-process path — `demo.loop --local`, the tests, and any caller that is
+    not an LLM turn with a timeout on it. The staged tools above are the same
+    three steps with the orchestrator's turn boundary between them.
+    """
+    pass_ = open_day(store, clock, advance=advance, plays=plays)
+    rank_day(pass_, insight, store, title_like=title_like, location=location,
+             remote_only=remote_only)
+    return close_day(pass_, insight, store, remember=remember, plays=plays)
 
 
 def prepare_pack(insight: Insight, store: GraphStore, job_id: str, day: int,
@@ -137,7 +227,7 @@ def prepare_pack(insight: Insight, store: GraphStore, job_id: str, day: int,
         raise PermissionError("D1 shortlisting is not autonomous yet — the human "
                               "has to ask for this pack")
 
-    metrics = RunMetrics(day=day)
+    metrics = RunMetrics(day=day, pipeline="P-B")
     started = time.monotonic()
     plays = plays or PlayIndex(store, Rote())
 

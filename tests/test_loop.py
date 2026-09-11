@@ -101,6 +101,14 @@ class FakeInsight:
             return [job for job in self.jobs if job["id"] == params["job_id"]]
         if name == "runs_series":
             return self.runs
+        if name == "predictions_window":
+            # Resolved predictions only, newest first — the rows the dashboard
+            # derives accuracy from, since the runs row is written before the
+            # human has answered and carries none.
+            rows = [row for row in self.applications
+                    if row.get("predicted") and row.get("actual")]
+            rows.sort(key=lambda row: -(row.get("day") or 0))
+            return rows[: params.get("limit", 15)]
         raise KeyError(name)
 
     # -- write

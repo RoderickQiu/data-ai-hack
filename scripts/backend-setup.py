@@ -18,12 +18,14 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
+from typing import Any, Mapping, Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agent.clock import DayClock                      # noqa: E402
-from agent.config import settings                     # noqa: E402
+from agent.config import DATA_DIR, settings           # noqa: E402
 from agent.corpus import build_corpus, load_raw       # noqa: E402
 from insight.hotdata import HotdataError              # noqa: E402
 from insight.store import Insight                     # noqa: E402
@@ -69,6 +71,116 @@ def ensure_tables(insight: Insight, recreate: bool = False) -> None:
                     f"{insight.client.catalog}.public.{table}")
 
 
+# Probe rows written into the live `runs` table while working out the parquet
+# load and the HydraDB caps. They are real rows the table really holds, so they
+# are dropped here — in the one destructive pass a user has to approve anyway —
+# rather than filtered out by the chart. A reader that hides rows a writer wrote
+# is the quiet correction this project's chart rules exist to prevent.
+#
+# Named explicitly rather than matched by a rule: "delete every row that looks
+# like junk" is not something to hand a migration over a live table.
+DISCARD_RUN_IDS = frozenset({
+    "run-c9b14489f3",   # day 97, probe row
+    "run-9402281cf0",   # day 99, probe row
+})
+
+
+def discard_plan(rows: Sequence[Mapping[str, Any]], horizon: int) -> tuple[list, list]:
+    """Split the dumped rows into (keep, drop), and flag anything suspicious.
+
+    Returns the rows to restore and the rows to drop. A row whose ``day`` is
+    past the clock horizon cannot have come from ``DayClock.advance``, so it is
+    *reported* — but never dropped on that basis alone. The horizon is a canary
+    for junk nobody has noticed yet, not a deletion rule.
+    """
+    keep, drop = [], []
+    for row in rows:
+        (drop if row.get("run_id") in DISCARD_RUN_IDS else keep).append(row)
+    suspicious = [row for row in keep
+                  if isinstance(row.get("day"), int) and row["day"] > horizon]
+    for row in suspicious:
+        _tick(False, f"day {row['day']} is past the clock horizon of {horizon} "
+                     f"({row.get('run_id')}) — kept, but it will plot")
+    return keep, drop
+
+
+def migrate_runs(insight: Insight, dry_run: bool = True) -> dict:
+    """Add new columns to a live ``runs`` table without losing the run history.
+
+    ``ensure_tables(recreate=True)`` drops the table, and the history *is* the
+    chart — dropping it to gain a column costs the thing the column was for.
+    hotdata infers columns on load and ``append`` never adds one, so the only
+    route is dump → drop → recreate from the seed → re-append.
+
+    The dump is written to disk *before* anything is dropped, and it contains
+    every row including the ones this pass discards, so nothing here is
+    unrecoverable. A migration that loses the curve is worse than a missing
+    column.
+
+    Duplicate ``bootstrap`` rows need no handling: the dump comes from
+    ``runs_series``, which excludes them, and the recreate writes exactly one
+    fresh seed row — so they are gone by construction rather than by a rule.
+    """
+    from agent.schema import RUNS_COLUMNS, RUNS_SEED
+
+    rows = insight.run("runs_series", {"limit": 10000})
+    present = set(rows[0]) if rows else set()
+    missing = [column for column in RUNS_COLUMNS if column not in present]
+    keep, drop = discard_plan(rows, DayClock.load().horizon)
+    report = {"rows": len(rows), "missing_columns": missing, "migrated": False,
+              "keep": len(keep), "drop": [r.get("run_id") for r in drop]}
+
+    # Both reasons to run, checked together. Checking only for missing columns
+    # would strand the probe rows the moment someone else recreates the table:
+    # the cleanup was folded in here precisely so it rides the one destructive
+    # pass, and it cannot ride a pass that already returned.
+    if not missing and not drop:
+        _tick(True, f"runs has all {len(RUNS_COLUMNS)} columns and nothing to discard")
+        return report
+
+    backup = DATA_DIR / f"runs-backup-{int(time.time())}.json"
+    backup.parent.mkdir(parents=True, exist_ok=True)
+    backup.write_text(json.dumps(rows, indent=2, default=str))
+    report["backup"] = str(backup)
+    _tick(True, f"wrote {backup} ({len(rows)} row(s), including any discarded below)")
+
+    if missing:
+        print(f"  adding {', '.join(missing)}")
+    print(f"  keeping {len(keep)} run row(s)")
+    for row in drop:
+        print(f"  DROPPING {row.get('run_id')} (day {row.get('day')}) — probe row")
+
+    if dry_run:
+        print("  --dry-run: stopping before the write. Re-run without it to apply.")
+        return report
+
+    restored = [{column: row.get(column, RUNS_SEED[column])
+                 for column in RUNS_COLUMNS} for row in keep]
+    if missing:
+        # Columns are the only thing that needs the table gone: hotdata infers
+        # them on load and `append` never adds one.
+        insight.client.drop_table("runs")
+        insight._load_rows("runs", [RUNS_SEED], RUNS_COLUMNS, mode="replace",
+                           key=RUNS_COLUMNS[0])
+        if restored:
+            insight._load_rows("runs", restored, RUNS_COLUMNS, mode="append",
+                               key=RUNS_COLUMNS[0])
+    else:
+        # Discard-only: `replace` replaces rows, not column types, so the table
+        # never has to be dropped at all. Strictly less destructive, and the
+        # types that took a while to get right are not re-inferred.
+        insight._load_rows("runs", [RUNS_SEED] + restored, RUNS_COLUMNS,
+                           mode="replace", key=RUNS_COLUMNS[0])
+
+    after = insight.run("runs_series", {"limit": 10000})
+    report["migrated"] = True
+    report["rows_after"] = len(after)
+    _tick(len(after) == len(keep),
+          f"runs now has {len(RUNS_COLUMNS)} columns and {len(after)} row(s); "
+          f"kept {len(keep)}, discarded {len(drop)}")
+    return report
+
+
 def ingest_candidate(store: GraphStore, resume: Path | None, prefs: Path | None) -> None:
     """Resume bullets enter verified; preference prose enters through Cognee."""
     from memory.remember import Remember
@@ -107,6 +219,64 @@ def sync(store: GraphStore) -> None:
         _tick(False, f"sync failed: {str(exc)[:160]}")
 
 
+def mirror(store: GraphStore) -> None:
+    """Push the whole graph to HydraDB, then read it back and compare.
+
+    A run only pushes what it dirtied, so anything written before the mirror
+    worked is on this machine and nowhere else. This is also the only check that
+    the round trip *restores* rather than merely accepts: HydraDB returns
+    `description` empty, so the props ride in `metadata` (memory/graph.py), and
+    a push that lands while the pull comes back blank is the failure this
+    catches.
+    """
+    from memory.graph import HydraMirror
+
+    try:
+        hydra = HydraMirror(settings())
+    except Exception as exc:
+        _tick(False, f"HydraDB unavailable: {str(exc)[:160]}")
+        return
+
+    graph = store.graph
+    dirty = ([("node", node_id) for node_id in graph.nodes]
+             + [("edge", key) for key in graph.edges])
+    try:
+        pushed = hydra.push(graph, dirty)
+    except Exception as exc:
+        _tick(False, f"push failed: {str(exc)[:200]}")
+        return
+    _tick(True, f"pushed {pushed['pushed']} item(s) to "
+                f"{pushed['database']}/{pushed['collection']}")
+
+    # Ingest is asynchronous (202), so a pull straight after a push legitimately
+    # comes back short. The count is reported, never asserted.
+    try:
+        restored = hydra.pull()
+    except Exception as exc:
+        _tick(False, f"pull failed: {str(exc)[:200]}")
+        return
+    _tick(len(restored.nodes) > 0,
+          f"pulled back {len(restored.nodes)} node(s), {len(restored.edges)} edge(s) "
+          f"(local: {len(graph.nodes)} / {len(graph.edges)})")
+
+    # An edge deficit straight after a push is eventual consistency, not a bug:
+    # successive pulls converge (882 -> 592 -> 352 -> 234 -> 128 was measured on
+    # one push). Say so, or the next person spends an hour chasing it.
+    if len(restored.edges) < len(graph.edges):
+        print(f"  {len(graph.edges) - len(restored.edges)} edge(s) not back yet — "
+              f"ingest is async (202); re-run to watch it converge")
+
+    # A *propless* node is the failure that does not converge. Batching turned
+    # an all-or-nothing push into a partial one, so a batch rejected for one bad
+    # item leaves its nodes in HydraDB as id-and-label only — present, listed,
+    # and useless to restore from. Named individually: "the mirror holds it" has
+    # to mean the props too.
+    blank = [node.id for node in restored.nodes.values()
+             if not node.props and graph.nodes.get(node.id) and graph.nodes[node.id].props]
+    _tick(not blank, f"{len(blank)} node(s) came back without the props they have locally"
+                     + (f" (e.g. {blank[0]})" if blank else ""))
+
+
 def status(insight: Insight | None, store: GraphStore) -> None:
     config = settings()
     print(f"\ncandidate: {config.candidate_id}   day: {DayClock.load().day}")
@@ -136,11 +306,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--tables", action="store_true", help="create applications and runs")
+    parser.add_argument("--migrate-runs", action="store_true",
+                        help="add new columns to runs without losing the history "
+                             "(dumps to data/ first; pair with --dry-run to preview)")
     parser.add_argument("--recreate-tables", action="store_true",
                         help="rebuild applications and runs (drops the rows in them)")
     parser.add_argument("--resume", type=Path)
     parser.add_argument("--prefs", type=Path)
     parser.add_argument("--sync", action="store_true", help="Cognee graph -> candidate graph")
+    parser.add_argument("--mirror", action="store_true",
+                        help="push the whole graph to HydraDB, then pull it back and compare")
     parser.add_argument("--corpus", action="store_true",
                         help="rebuild the corpus from data/raw (offline; replaces jobs)")
     parser.add_argument("--project", metavar="TABLE",
@@ -158,6 +333,11 @@ def main() -> None:
         insight = None
 
     did_something = False
+    if args.migrate_runs and insight:
+        print(f"\nmigrate {insight.client.catalog}.public.runs")
+        migrate_runs(insight, dry_run=args.dry_run)
+        did_something = True
+
     if (args.tables or args.recreate_tables) and insight:
         print("\ntables")
         ensure_tables(insight, recreate=args.recreate_tables)
@@ -167,6 +347,8 @@ def main() -> None:
         did_something = True
     if args.sync:
         print("\nsync"); sync(store); did_something = True
+    if args.mirror:
+        print("\nHydraDB mirror"); mirror(store); did_something = True
     if args.corpus and insight:
         print("\ncorpus (offline, from data/raw)")
         batches = [{"source": source, "slug": slug, "company": slug, "items": items}

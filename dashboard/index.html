@@ -1,3 +1,5 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Muscle Memory</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
@@ -213,38 +215,104 @@
   }
 </style>
 
-<div id="root"></div>
+<!-- Static text, replaced wholesale by createRoot().render(). It costs nothing,
+     and it is what a link preview, a reader-mode pass, or a browser that could
+     not reach the CDN shows instead of a blank white page. -->
+<div id="root">
+  <div class="wrap">
+    <div class="eyebrow">Muscle Memory</div>
+    <p class="sub">An assistant that hunts for jobs on your behalf. The longer it runs,
+    the cheaper it gets, the less it has to ask you, and the better it gets at knowing
+    which jobs you actually want. Loading the live figures…</p>
+  </div>
+</div>
 
-<script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone@7.25.6/babel.min.js"></script>
+<!-- cdnjs rather than unpkg: unpkg resolves through a redirect chain that some
+     networks drop, and a failed script tag here is a blank page rather than a
+     degraded one. Each URL verified 200 at the pinned version. `onerror` records
+     which one failed so the message below can name it instead of guessing. -->
+<script>window.__missing = [];</script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"
+        onerror="window.__missing.push('react')"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"
+        onerror="window.__missing.push('react-dom')"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.25.6/babel.min.js"
+        onerror="window.__missing.push('babel-standalone')"></script>
 
 <script type="text/babel" data-presets="react">
-const { useState, useRef, useLayoutEffect, Fragment } = React;
+const { useState, useEffect, useRef, useLayoutEffect, Fragment } = React;
 
-const RUNS = [
-  { run:1,  day:1,  mode:'first_run',      tokens:14820, wall:21.4, questions:6, shown:5, kept:2, acc:0.40, touches:14 },
-  { run:2,  day:2,  mode:'first_run',      tokens:12140, wall:18.9, questions:5, shown:5, kept:2, acc:0.44, touches:12 },
-  { run:3,  day:3,  mode:'partial_replay', tokens:9380,  wall:14.2, questions:4, shown:5, kept:3, acc:0.48, touches:11 },
-  { run:4,  day:4,  mode:'partial_replay', tokens:6820,  wall:11.6, questions:4, shown:5, kept:3, acc:0.52, touches:10 },
-  { run:5,  day:5,  mode:'partial_replay', tokens:5210,  wall:9.4,  questions:3, shown:5, kept:3, acc:0.55, touches:9 },
-  { run:6,  day:6,  mode:'full_replay',    tokens:4080,  wall:7.1,  questions:2, shown:5, kept:3, acc:0.58, touches:8 },
-  { run:7,  day:7,  mode:'full_replay',    tokens:3560,  wall:6.3,  questions:2, shown:5, kept:3, acc:0.63, touches:8 },
-  { run:8,  day:8,  mode:'full_replay',    tokens:3120,  wall:5.6,  questions:1, shown:5, kept:4, acc:0.66, touches:7 },
-  { run:9,  day:9,  mode:'full_replay',    tokens:2880,  wall:5.2,  questions:1, shown:5, kept:3, acc:0.68, touches:7 },
-  { run:10, day:10, mode:'full_replay',    tokens:2610,  wall:4.8,  questions:1, shown:5, kept:4, acc:0.72, touches:7 },
-  { run:11, day:11, mode:'full_replay',    tokens:2400,  wall:4.4,  questions:0, shown:5, kept:4, acc:0.74, touches:6 },
-  { run:12, day:12, mode:'partial_replay', tokens:3390,  wall:6.0,  questions:1, shown:5, kept:4, acc:0.73, touches:7,
-    note:'It met an application question it had never seen, so it had to work that one out. Everything else came from memory.' },
-  { run:13, day:13, mode:'full_replay',    tokens:2180,  wall:4.1,  questions:0, shown:5, kept:4, acc:0.78, touches:6 },
-  { run:14, day:14, mode:'full_replay',    tokens:2020,  wall:3.9,  questions:0, shown:5, kept:4, acc:0.80, touches:6 },
-  { run:15, day:15, mode:'full_replay',    tokens:1940,  wall:3.7,  questions:0, shown:5, kept:4, acc:0.82, touches:6 },
-  { run:16, day:16, mode:'full_replay',    tokens:1860,  wall:3.5,  questions:0, shown:5, kept:4, acc:0.84, touches:6 },
-  { run:17, day:17, mode:'full_replay',    tokens:1790,  wall:3.4,  questions:0, shown:5, kept:5, acc:0.85, touches:5 },
-  { run:18, day:18, mode:'full_replay',    tokens:1710,  wall:3.3,  questions:0, shown:5, kept:4, acc:0.86, touches:6 },
-  { run:19, day:19, mode:'full_replay',    tokens:1240,  wall:3.1,  questions:0, shown:5, kept:5, acc:0.87, touches:5 },
-  { run:20, day:20, mode:'full_replay',    tokens:1180,  wall:3.0,  questions:0, shown:5, kept:5, acc:0.90, touches:5 }
-];
+/* ---------------------------------------------------------------------------
+   This page reads one document — dashboard/data.json, built by demo/dashboard.py
+   from the runs table, the applications table and the graph. It never computes
+   a metric; it draws what it is given, and where a metric is null it draws a
+   gap, because "no data" and "zero" are different facts.
+
+   The sample below is the fallback for when the feed cannot be reached. It is
+   flagged as a sample in the masthead at every instant it is on screen, so a
+   dashboard that has lost its backend says so instead of quietly showing
+   fiction. Build the real one with `make dashboard`.
+--------------------------------------------------------------------------- */
+
+const SAMPLE = {
+  live: false,
+  day: 20,
+  cost_basis: 'tokens',
+  runs: [
+    { day:1,  mode:'first_run',      tokens:14820, wall:21.4, questions:6, shown:5, kept:2, acc:0.40, touches:14 },
+    { day:2,  mode:'first_run',      tokens:12140, wall:18.9, questions:5, shown:5, kept:2, acc:0.44, touches:12 },
+    { day:3,  mode:'partial_replay', tokens:9380,  wall:14.2, questions:4, shown:5, kept:3, acc:0.48, touches:11 },
+    { day:4,  mode:'partial_replay', tokens:6820,  wall:11.6, questions:4, shown:5, kept:3, acc:0.52, touches:10 },
+    { day:5,  mode:'partial_replay', tokens:5210,  wall:9.4,  questions:3, shown:5, kept:3, acc:0.55, touches:9 },
+    { day:6,  mode:'full_replay',    tokens:4080,  wall:7.1,  questions:2, shown:5, kept:3, acc:0.58, touches:8 },
+    { day:7,  mode:'full_replay',    tokens:3560,  wall:6.3,  questions:2, shown:5, kept:3, acc:0.63, touches:8 },
+    { day:8,  mode:'full_replay',    tokens:3120,  wall:5.6,  questions:1, shown:5, kept:4, acc:0.66, touches:7 },
+    { day:9,  mode:'full_replay',    tokens:2880,  wall:5.2,  questions:1, shown:5, kept:3, acc:0.68, touches:7 },
+    { day:10, mode:'full_replay',    tokens:2610,  wall:4.8,  questions:1, shown:5, kept:4, acc:0.72, touches:7 },
+    { day:11, mode:'full_replay',    tokens:2400,  wall:4.4,  questions:0, shown:5, kept:4, acc:0.74, touches:6 },
+    { day:12, mode:'partial_replay', tokens:3390,  wall:6.0,  questions:1, shown:5, kept:4, acc:0.73, touches:7,
+      note:'It met a task shape it had never seen, so it had to work that one out. The rest came from memory.' },
+    { day:13, mode:'full_replay',    tokens:2180,  wall:4.1,  questions:0, shown:5, kept:4, acc:0.78, touches:6 },
+    { day:14, mode:'full_replay',    tokens:2020,  wall:3.9,  questions:0, shown:5, kept:4, acc:0.80, touches:6 },
+    { day:15, mode:'full_replay',    tokens:1940,  wall:3.7,  questions:0, shown:5, kept:4, acc:0.82, touches:6 },
+    { day:16, mode:'full_replay',    tokens:1860,  wall:3.5,  questions:0, shown:5, kept:4, acc:0.84, touches:6 },
+    { day:17, mode:'full_replay',    tokens:1790,  wall:3.4,  questions:0, shown:5, kept:5, acc:0.85, touches:5 },
+    { day:18, mode:'full_replay',    tokens:1710,  wall:3.3,  questions:0, shown:5, kept:4, acc:0.86, touches:6 },
+    { day:19, mode:'full_replay',    tokens:1240,  wall:3.1,  questions:0, shown:5, kept:5, acc:0.87, touches:5 },
+    { day:20, mode:'full_replay',    tokens:1180,  wall:3.0,  questions:0, shown:5, kept:5, acc:0.90, touches:5 }
+  ],
+  stats: {
+    day: 20,
+    cost:      { value: 1180, first: 14820, drop_pct: 92 },
+    questions: { value: 0,    first: 6 },
+    accuracy:  { value: 0.90, first: 0.40 },
+    touches:   { value: 5,    first: 14 }
+  },
+  shortlist: [
+    { job_id:'s1', title:'Senior PM, Integrations', company:'Linear',
+      meta:'Remote (US/EU) · $190k–$230k · you can back up 4 of the 5 things they ask for',
+      predicted:'keep', score:0.88, why_source:'stored',
+      why:'Stripe replied to you about a similar job on day 6, and this company is under 2,000 people, which you told it you prefer.',
+      gaps:['Kubernetes'] },
+    { job_id:'s2', title:'Principal PM, Payments Infrastructure', company:'Mercury',
+      meta:'San Francisco · $235k–$280k · you can back up 5 of the 6 things they ask for',
+      predicted:'skip', score:0.79, why_source:'stored',
+      why:'You match nearly everything they ask for, but you turned down two jobs at this level for being too senior.',
+      gaps:[] },
+    { job_id:'s3', title:'Product Manager, Payroll', company:'Deel',
+      meta:'Remote (Global) · $160k–$195k',
+      predicted:'skip', score:0.72, why_source:'stored',
+      why:'The pay is in the bottom third for this job title, compared against 1,043 real job ads.',
+      gaps:[] }
+  ],
+  knowledge: {
+    claims: 24, answers: 7, rules: 3, plays: 3,
+    rule_texts: ['Companies under 2,000 people', 'Nothing at staff level or above',
+                 'Remote, or within reach of Seattle'],
+    readiness: { value: 0.8, window: 5, agreed: 4, threshold: 0.8, state: 'Ready' },
+    autonomy: { shortlisting: 'Autonomous', preference_rules: 'Supervised' }
+  }
+};
 
 const MODES = {
   first_run:      { label: 'Worked it out',   hint: 'first time, nothing to reuse', color: 'var(--first)' },
@@ -252,16 +320,56 @@ const MODES = {
   full_replay:    { label: 'Pure memory',     hint: 'did the whole thing from memory', color: 'var(--full)' }
 };
 
-const fmt = n => n.toLocaleString('en-US');
+const COST_LABEL = {
+  tokens:     { card: 'Tokens used today', col: 'Tokens',    axis: 'AI tokens spent each day' },
+  tool_calls: { card: 'Tool calls today',  col: 'Tool calls',
+                axis: 'tool calls made each day — a stand-in for cost, not a token count' }
+};
 
-const L = 60, R = 948, LAST = RUNS.length;
-const xOf = i => L + (R - L) * (i / (LAST - 1));
+const fmt = n => (n == null ? '—' : Number(n).toLocaleString('en-US'));
+const pct = v => (v == null ? '—' : Math.round(v * 100) + '%');
+const modeOf = r => MODES[r.mode] || MODES.first_run;
+
+const L = 60, R = 948;
+const xOf = (i, n) => (n < 2 ? (L + R) / 2 : L + (R - L) * (i / (n - 1)));
+
+/* A round number at or above the largest value, so the axis is readable
+   whatever the real data turns out to be. */
+function niceMax(values) {
+  const max = Math.max(0, ...values.filter(v => v != null));
+  if (!(max > 0)) return 1;
+  const mag = Math.pow(10, Math.floor(Math.log10(max)));
+  const n = max / mag;
+  const step = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find(s => n <= s) || 10;
+  return step * mag;
+}
+
+/* Nulls break the line rather than being bridged: an absent metric is not a
+   value, and joining across it would draw a measurement nobody took. */
+function linePath(values, xf, yf) {
+  let path = '', pen = false;
+  values.forEach((v, i) => {
+    if (v == null) { pen = false; return; }
+    path += (pen ? ' L' : ' M') + xf(i) + ' ' + yf(v);
+    pen = true;
+  });
+  return path;
+}
 
 /* ---- chart primitives ---- */
 function Frame({ bot, ticks, fmtTick }) {
+  /* Two ticks that print the same label are one tick — on a chart whose real
+     maximum is 1, "1 / 1 / 0" is noise, not an axis. */
+  const seen = new Set();
+  const shown = ticks.filter(t => {
+    const label = fmtTick(t.v);
+    if (seen.has(label)) return false;
+    seen.add(label);
+    return true;
+  });
   return (
     <Fragment>
-      {ticks.map(t => (
+      {shown.map(t => (
         <Fragment key={t.v}>
           <line x1={L} x2={R} y1={t.y} y2={t.y} stroke="var(--grid)" strokeWidth="1" />
           <text x={L - 13} y={t.y + 3.5} textAnchor="end">{fmtTick(t.v)}</text>
@@ -276,120 +384,152 @@ function DirectLabel({ x, y, anchor = 'start', children }) {
   return <text x={x} y={y} textAnchor={anchor} className="direct">{children}</text>;
 }
 
-function Crosshair({ i, height }) {
+function Crosshair({ i, n, height }) {
   return (
     <line
-      x1={i == null ? 0 : xOf(i)} x2={i == null ? 0 : xOf(i)} y1={0} y2={height}
+      x1={i == null ? 0 : xOf(i, n)} x2={i == null ? 0 : xOf(i, n)} y1={0} y2={height}
       stroke="var(--ink-muted)" strokeWidth="1" strokeDasharray="3 3"
       opacity={i == null ? 0 : 0.55}
     />
   );
 }
 
-/* ---- panel 1: tokens ---- */
-function TokensPlot({ hover }) {
-  const top = 22, bot = 122, max = 16000;
+/* ---- panel 1: cost ---- */
+function CostPlot({ runs, costKey, hover }) {
+  const n = runs.length, top = 22, bot = 122;
+  const values = runs.map(r => r[costKey] ?? null);
+  const max = niceMax(values);
   const y = v => bot - (v / max) * (bot - top);
+  const xf = i => xOf(i, n);
 
-  const pts = RUNS.map((r, i) => [xOf(i), y(r.tokens)]);
-  const line = pts.map(p => p.join(',')).join(' ');
-  const spike = RUNS.findIndex(r => r.note);
+  const area = values.map((v, i) => [xf(i), y(v ?? 0)].join(',')).join(' ');
+  const spike = runs.findIndex(r => r.note);
+  const first = values[0], last = values[n - 1];
 
   return (
     <svg className="plot" id="plot-tokens" viewBox="0 0 1000 150" role="img"
-         aria-label="Tokens used falling from 14,820 on day 1 to 1,180 on day 20, with one spike on day 12.">
-      <Frame bot={bot} ticks={[16000, 8000, 0].map(v => ({ v, y: y(v) }))}
-             fmtTick={v => v ? (v / 1000) + 'k' : '0'} />
+         aria-label={`Cost per day, from ${fmt(first)} on day ${runs[0].day} to ${fmt(last)} on day ${runs[n - 1].day}.`}>
+      <Frame bot={bot} ticks={[max, max / 2, 0].map(v => ({ v, y: y(v) }))}
+             fmtTick={v => (v >= 1000 ? (v / 1000) + 'k' : String(Math.round(v)))} />
 
-      <polygon points={`${L},${bot} ${line} ${R},${bot}`} fill="var(--full)" opacity="0.10" />
-      <polyline points={line} fill="none" stroke="var(--ink-2)" strokeWidth="2"
-                strokeLinejoin="round" strokeLinecap="round" />
-      {RUNS.map((r, i) => (
-        <circle key={r.run} cx={xOf(i)} cy={y(r.tokens)} r="4.5"
-                fill={MODES[r.mode].color} stroke="var(--surface)" strokeWidth="2" />
+      <polygon points={`${L},${bot} ${area} ${R},${bot}`} fill="var(--full)" opacity="0.10" />
+      <path d={linePath(values, xf, y)} fill="none" stroke="var(--ink-2)" strokeWidth="2"
+            strokeLinejoin="round" strokeLinecap="round" />
+      {runs.map((r, i) => values[i] == null ? null : (
+        <circle key={r.day} cx={xf(i)} cy={y(values[i])} r="4.5"
+                fill={modeOf(r).color} stroke="var(--surface)" strokeWidth="2" />
       ))}
 
-      <DirectLabel x={L} y={y(RUNS[0].tokens) - 11}>{fmt(RUNS[0].tokens)}</DirectLabel>
-      <DirectLabel x={R + 10} y={y(RUNS[LAST - 1].tokens) + 4}>{fmt(RUNS[LAST - 1].tokens)}</DirectLabel>
+      {first != null && <DirectLabel x={L} y={y(first) - 11}>{fmt(first)}</DirectLabel>}
+      {last != null && <DirectLabel x={R + 10} y={y(last) + 4}>{fmt(last)}</DirectLabel>}
 
-      <line x1={xOf(spike)} x2={xOf(spike)} y1={y(RUNS[spike].tokens) - 9} y2={top - 6}
-            stroke="var(--axis)" strokeWidth="1" strokeDasharray="2 3" />
-      <text x={xOf(spike) - 6} y={top - 10} textAnchor="end">hit a question it had never seen</text>
+      {spike >= 0 && values[spike] != null && (
+        <Fragment>
+          <line x1={xf(spike)} x2={xf(spike)} y1={y(values[spike]) - 9} y2={top - 6}
+                stroke="var(--axis)" strokeWidth="1" strokeDasharray="2 3" />
+          <text x={xf(spike) - 6} y={top - 10} textAnchor="end">met something it had never seen</text>
+        </Fragment>
+      )}
 
-      <Crosshair i={hover} height={150} />
+      <Crosshair i={hover} n={n} height={150} />
     </svg>
   );
 }
 
 /* ---- panel 2: questions ---- */
-function QuestionsPlot({ hover }) {
-  const top = 16, bot = 88, max = 6;
+function QuestionsPlot({ runs, hover }) {
+  const n = runs.length, top = 16, bot = 88;
+  const max = Math.max(1, ...runs.map(r => r.questions || 0));
   const y = v => bot - (v / max) * (bot - top);
-  const w = 16;
+  const xf = i => xOf(i, n);
+  const w = Math.max(3, Math.min(16, ((R - L) / Math.max(n, 1)) * 0.6));
+
+  const firstQuiet = runs.findIndex((r, i) =>
+    !r.questions && runs.slice(i).every(x => !x.questions));
 
   return (
     <svg className="plot" id="plot-questions" viewBox="0 0 1000 116" role="img"
-         aria-label="Questions it asked you falling from 6 on day 1 to none from day 13 onward.">
-      <Frame bot={bot} ticks={[6, 3, 0].map(v => ({ v, y: y(v) }))} fmtTick={v => String(v)} />
+         aria-label={`Questions it asked you, from ${runs[0].questions} on day ${runs[0].day} onward.`}>
+      <Frame bot={bot} ticks={[max, max / 2, 0].map(v => ({ v, y: y(v) }))}
+             fmtTick={v => String(Math.round(v))} />
 
-      {RUNS.map((r, i) => r.questions === 0 ? (
-        <circle key={r.run} cx={xOf(i)} cy={bot} r="2.5" fill="var(--axis)" />
+      {runs.map((r, i) => !r.questions ? (
+        <circle key={r.day} cx={xf(i)} cy={bot} r="2.5" fill="var(--axis)" />
       ) : (
-        <Fragment key={r.run}>
-          <rect x={xOf(i) - w / 2} y={y(r.questions)} width={w} height={bot - y(r.questions)}
-                rx="4" ry="4" fill={MODES[r.mode].color} />
-          <rect x={xOf(i) - w / 2} y={bot - 5} width={w} height="5" fill={MODES[r.mode].color} />
+        <Fragment key={r.day}>
+          <rect x={xf(i) - w / 2} y={y(r.questions)} width={w} height={bot - y(r.questions)}
+                rx="4" ry="4" fill={modeOf(r).color} />
+          <rect x={xf(i) - w / 2} y={bot - 5} width={w} height="5" fill={modeOf(r).color} />
         </Fragment>
       ))}
 
-      <DirectLabel x={L} y={y(6) - 9}>asked you 6 things</DirectLabel>
-      <DirectLabel x={xOf(13) + 8} y={bot - 17}>never had to ask again</DirectLabel>
+      {runs[0].questions > 0 &&
+        <DirectLabel x={L} y={y(runs[0].questions) - 9}>asked you {runs[0].questions} things</DirectLabel>}
+      {firstQuiet > 0 &&
+        <DirectLabel x={xf(firstQuiet) + 8} y={bot - 17}>never had to ask again</DirectLabel>}
 
-      <Crosshair i={hover} height={116} />
+      <Crosshair i={hover} n={n} height={116} />
     </svg>
   );
 }
 
 /* ---- panel 3: accuracy ---- */
-function AccuracyPlot({ hover }) {
-  const top = 22, bot = 122, lo = 0.3, hi = 1;
+function AccuracyPlot({ runs, hover }) {
+  const n = runs.length, top = 22, bot = 122, hi = 1;
+  const values = runs.map(r => (r.acc == null ? null : r.acc));
+  const known = values.filter(v => v != null);
+  const lo = Math.max(0, Math.min(0.3, Math.min(...(known.length ? known : [0.3])) - 0.1));
   const y = v => bot - ((v - lo) / (hi - lo)) * (bot - top);
-  const pts = RUNS.map((r, i) => [xOf(i), y(r.acc)]);
+  const xf = i => xOf(i, n);
+
+  const firstKnown = values.findIndex(v => v != null);
+  const lastKnown = values.length - 1 - [...values].reverse().findIndex(v => v != null);
 
   return (
     <svg className="plot" id="plot-acc" viewBox="0 0 1000 150" role="img"
-         aria-label="How often it guessed your decision correctly, rising from 40 percent on day 1 to 90 percent on day 20.">
-      <Frame bot={bot} ticks={[1, 0.65, 0.3].map(v => ({ v, y: y(v) }))}
+         aria-label={known.length
+           ? `How often it guessed your decision correctly, from ${pct(known[0])} to ${pct(known[known.length - 1])}.`
+           : 'No resolved predictions yet.'}>
+      <Frame bot={bot} ticks={[hi, (hi + lo) / 2, lo].map(v => ({ v, y: y(v) }))}
              fmtTick={v => Math.round(v * 100) + '%'} />
 
-      <polyline points={pts.map(p => p.join(',')).join(' ')} fill="none"
-                stroke="var(--ink-2)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-      {RUNS.map((r, i) => (
-        <circle key={r.run} cx={xOf(i)} cy={y(r.acc)} r="4.5"
-                fill={MODES[r.mode].color} stroke="var(--surface)" strokeWidth="2" />
+      <path d={linePath(values, xf, y)} fill="none" stroke="var(--ink-2)" strokeWidth="2"
+            strokeLinejoin="round" strokeLinecap="round" />
+      {runs.map((r, i) => values[i] == null ? null : (
+        <circle key={r.day} cx={xf(i)} cy={y(values[i])} r="4.5"
+                fill={modeOf(r).color} stroke="var(--surface)" strokeWidth="2" />
       ))}
 
-      <DirectLabel x={L} y={y(RUNS[0].acc) + 20}>40% — barely better than a coin flip</DirectLabel>
-      <DirectLabel x={R + 10} y={y(RUNS[LAST - 1].acc) + 4}>90%</DirectLabel>
+      {firstKnown >= 0 && (
+        <DirectLabel x={L} y={y(values[firstKnown]) + 20}>
+          {pct(values[firstKnown])}{values[firstKnown] < 0.6 ? ' — barely better than a coin flip' : ''}
+        </DirectLabel>
+      )}
+      {firstKnown >= 0 &&
+        <DirectLabel x={R + 10} y={y(values[lastKnown]) + 4}>{pct(values[lastKnown])}</DirectLabel>}
+      {!known.length &&
+        <text x={(L + R) / 2} y={(top + bot) / 2} textAnchor="middle">no resolved predictions yet</text>}
 
-      <Crosshair i={hover} height={150} />
+      <Crosshair i={hover} n={n} height={150} />
     </svg>
   );
 }
 
 /* ---- tooltip ---- */
-function Tip({ hover, tipRef }) {
-  if (hover == null) return <div className="tip" id="tip" ref={tipRef} data-on="0" aria-hidden="true" />;
-  const r = RUNS[hover], m = MODES[r.mode];
+function Tip({ runs, costKey, costLabel, hover, tipRef }) {
+  if (hover == null || !runs[hover]) {
+    return <div className="tip" id="tip" ref={tipRef} data-on="0" aria-hidden="true" />;
+  }
+  const r = runs[hover], m = modeOf(r);
   return (
     <div className="tip" id="tip" ref={tipRef} data-on="1" aria-hidden="true">
       <div className="t-run">DAY {r.day}</div>
       <div className="t-mode"><i style={{ background: m.color }} />{m.label}</div>
       <dl>
-        <dt>Tokens used</dt><dd>{fmt(r.tokens)}</dd>
-        <dt>Time taken</dt><dd>{r.wall.toFixed(1)}s</dd>
+        {costKey && <Fragment><dt>{costLabel}</dt><dd>{fmt(r[costKey])}</dd></Fragment>}
+        <dt>Time taken</dt><dd>{r.wall == null ? '—' : r.wall.toFixed(1) + 's'}</dd>
         <dt>Questions asked</dt><dd>{r.questions}</dd>
-        <dt>Guessed right</dt><dd>{Math.round(r.acc * 100)}%</dd>
+        <dt>Guessed right</dt><dd>{pct(r.acc)}</dd>
         <dt>Times you stepped in</dt><dd>{r.touches}</dd>
       </dl>
       {r.note && <p style={{ margin: '8px 0 0', fontSize: '12px', color: 'var(--ink-2)', maxWidth: '210px' }}>{r.note}</p>}
@@ -398,11 +538,14 @@ function Tip({ hover, tipRef }) {
 }
 
 /* ---- the three charts with a shared crosshair ---- */
-function Charts() {
+function Charts({ runs, costBasis }) {
   const [hover, setHover] = useState(null);
   const [at, setAt] = useState(null);
   const hostRef = useRef(null);
   const tipRef = useRef(null);
+  const n = runs.length;
+  const cost = COST_LABEL[costBasis];
+  const costKey = costBasis === 'tool_calls' ? 'tool_calls' : costBasis === 'tokens' ? 'tokens' : null;
 
   useLayoutEffect(() => {
     const tip = tipRef.current, host = hostRef.current;
@@ -418,47 +561,70 @@ function Charts() {
   function onMove(ev) {
     const host = hostRef.current;
     const plot = ev.target.closest('svg.plot') || host.querySelector('svg.plot');
+    if (!plot || n < 1) return;
     const box = plot.getBoundingClientRect();
     const vb = plot.viewBox.baseVal.width;
     const vx = ((ev.clientX - box.left) / box.width) * vb;
     if (vx < L - 20 || vx > R + 20) { setHover(null); return; }
-    const i = Math.round(((vx - L) / (R - L)) * (LAST - 1));
-    setHover(Math.max(0, Math.min(LAST - 1, i)));
+    const i = n < 2 ? 0 : Math.round(((vx - L) / (R - L)) * (n - 1));
+    setHover(Math.max(0, Math.min(n - 1, i)));
     setAt({ clientX: ev.clientX, clientY: ev.clientY });
   }
 
   return (
     <div className="charts" id="charts" ref={hostRef} onPointerMove={onMove} onPointerLeave={() => setHover(null)}>
-      <div className="chart-row">
-        <div className="eyebrow">It costs less <span className="read">AI tokens spent each day</span></div>
-        <TokensPlot hover={hover} />
-      </div>
+      {costKey ? (
+        <div className="chart-row">
+          <div className="eyebrow">It costs less <span className="read">{cost.axis}</span></div>
+          <CostPlot runs={runs} costKey={costKey} hover={hover} />
+        </div>
+      ) : (
+        <div className="chart-row">
+          <div className="eyebrow">It costs less <span className="read">not measured yet</span></div>
+          <p style={{ margin: '10px 0 14px', fontSize: '13px', color: 'var(--ink-2)' }}>
+            The orchestrator does not report token usage to us yet, so there is nothing
+            honest to draw here. The two lines below do not depend on it.
+          </p>
+        </div>
+      )}
       <div className="chart-row">
         <div className="eyebrow">It needs you less <span className="read">questions it had to ask you</span></div>
-        <QuestionsPlot hover={hover} />
+        <QuestionsPlot runs={runs} hover={hover} />
       </div>
       <div className="chart-row">
         <div className="eyebrow">It knows you better <span className="read">how often it correctly guessed your decision</span></div>
-        <AccuracyPlot hover={hover} />
+        <AccuracyPlot runs={runs} hover={hover} />
       </div>
-      <Tip hover={hover} tipRef={tipRef} />
+      <Tip runs={runs} costKey={costKey} costLabel={cost ? cost.card.replace(' today', '') : ''}
+           hover={hover} tipRef={tipRef} />
     </div>
   );
 }
 
 /* ---- page sections ---- */
-function Masthead() {
+function Masthead({ doc }) {
+  const runs = doc.runs, last = runs[runs.length - 1];
+  const autonomous = (doc.knowledge.autonomy || {}).shortlisting === 'Autonomous';
   return (
     <header className="masthead">
       <div>
-        <div className="eyebrow">Your job search · day 20</div>
+        <div className="eyebrow">Your job search · day {doc.day}</div>
         <h1>Muscle Memory</h1>
         <p className="sub">An assistant that hunts for jobs on your behalf. The longer it runs, the cheaper it gets, the less it has to ask you, and the better it gets at knowing which jobs you actually want.</p>
       </div>
       <div className="masthead-meta">
-        <span className="chip sample">Example numbers, not live yet</span>
-        <span className="chip auto">Picking jobs without asking</span>
-        <span className="chip"><span className="dot" style={{ background: 'var(--full)' }} />Today it worked purely from memory</span>
+        {!doc.live && <span className="chip sample">Example numbers, not live yet</span>}
+        <span className={autonomous ? 'chip auto' : 'chip'}>
+          {autonomous ? 'Picking jobs without asking' : 'Still asks before it picks'}
+        </span>
+        {last && (
+          <span className="chip">
+            <span className="dot" style={{ background: modeOf(last).color }} />
+            {last.mode === 'full_replay' ? 'Today it worked purely from memory'
+              : last.mode === 'partial_replay' ? 'Today it worked mostly from memory'
+              : 'Today it worked it out from scratch'}
+          </span>
+        )}
       </div>
     </header>
   );
@@ -474,13 +640,27 @@ function Stat({ id, label, value, children }) {
   );
 }
 
-function Stats() {
+function Stats({ stats, costBasis, firstDay }) {
+  const cost = COST_LABEL[costBasis];
   return (
-    <section className="stats" aria-label="Latest run against the first run">
-      <Stat id="s-tokens" label="Tokens used today" value="1,180"><b>92% cheaper</b> than day 1</Stat>
-      <Stat id="s-questions" label="Questions it asked" value="0">It asked you <b>6</b> on day 1</Stat>
-      <Stat id="s-acc" label="Guessed your choice" value="90%">It was right <b>40%</b> of the time on day 1</Stat>
-      <Stat id="s-touches" label="Times you stepped in" value="5">Down from <b>14</b> on day 1</Stat>
+    <section className="stats" aria-label="Latest day against the first">
+      <Stat id="s-tokens" label={cost ? cost.card : 'Cost today'}
+            value={cost ? fmt(stats.cost.value) : '—'}>
+        {cost && stats.cost.drop_pct != null
+          ? <Fragment><b>{stats.cost.drop_pct}% cheaper</b> than day {firstDay}</Fragment>
+          : 'Not measured yet'}
+      </Stat>
+      <Stat id="s-questions" label="Questions it asked" value={fmt(stats.questions.value)}>
+        It asked you <b>{fmt(stats.questions.first)}</b> on day {firstDay}
+      </Stat>
+      <Stat id="s-acc" label="Guessed your choice" value={pct(stats.accuracy.value)}>
+        {stats.accuracy.first == null
+          ? 'No resolved predictions yet'
+          : <Fragment>It was right <b>{pct(stats.accuracy.first)}</b> of the time at first</Fragment>}
+      </Stat>
+      <Stat id="s-touches" label="Times you stepped in" value={fmt(stats.touches.value)}>
+        Down from <b>{fmt(stats.touches.first)}</b> on day {firstDay}
+      </Stat>
     </section>
   );
 }
@@ -497,23 +677,34 @@ function Legend() {
   );
 }
 
-function TrendPanel() {
+function TrendPanel({ doc }) {
+  const runs = doc.runs;
+  if (!runs.length) {
+    return (
+      <section className="panel">
+        <div className="panel-head"><div><h2>Getting better</h2>
+          <p>No runs logged yet. Tick a day and this fills in.</p></div></div>
+      </section>
+    );
+  }
   return (
     <section className="panel">
       <div className="panel-head">
         <div>
-          <h2>Twenty days of getting better</h2>
+          <h2>{runs.length} {runs.length === 1 ? 'day' : 'days'} of getting better</h2>
           <p>It sees a similar pile of jobs every day. What changes is how well it knows you.</p>
         </div>
         <Legend />
       </div>
-      <Charts />
-      <div className="axis-note"><span>Day 1</span><span>Day 20</span></div>
+      <Charts runs={runs} costBasis={doc.cost_basis} />
+      <div className="axis-note">
+        <span>Day {runs[0].day}</span><span>Day {runs[runs.length - 1].day}</span>
+      </div>
     </section>
   );
 }
 
-function Shortlist() {
+function Shortlist({ roles }) {
   return (
     <section className="panel">
       <div className="panel-head">
@@ -523,39 +714,45 @@ function Shortlist() {
         </div>
       </div>
 
-      <article className="role">
-        <div className="role-top"><h3>Senior PM, Integrations</h3><span className="co">Linear</span></div>
-        <div className="role-meta">Remote (US/EU) · $190k–$230k · you can back up 4 of the 5 things they ask for</div>
-        <p className="why">Stripe replied to you about a similar job on day 6, and this company is under 2,000 people, which you told it you prefer.</p>
-        <div className="role-foot">
-          <span className="pred keep">Thinks you’ll want this · 88% sure</span>
-          <span className="flag"><i />They want Kubernetes and you’ve never claimed it, so the application says so rather than bluffing</span>
-        </div>
-      </article>
+      {!roles.length && (
+        <div className="role"><p className="why" style={{ borderColor: 'var(--grid)' }}>
+          Nothing open right now — every role it has shown you has been answered.
+        </p></div>
+      )}
 
-      <article className="role">
-        <div className="role-top"><h3>Principal PM, Payments Infrastructure</h3><span className="co">Mercury</span></div>
-        <div className="role-meta">San Francisco · $235k–$280k · you can back up 5 of the 6 things they ask for</div>
-        <p className="why">You match nearly everything they ask for, but you turned down two jobs at this level for being too senior.</p>
-        <div className="role-foot">
-          <span className="pred skip">Thinks you’ll pass · 79% sure</span>
-        </div>
-      </article>
-
-      <article className="role">
-        <div className="role-top"><h3>Product Manager, Payroll</h3><span className="co">Deel</span></div>
-        <div className="role-meta">Remote (Global) · $160k–$195k</div>
-        <p className="why">The pay is in the bottom third for this job title, compared against 1,043 real job ads.</p>
-        <div className="role-foot">
-          <span className="pred skip">Thinks you’ll pass · 72% sure</span>
-          <span className="flag" style={{ color: 'var(--ink-muted)' }}>Shown deliberately as a test — it needs jobs you might reject to check whether its guesses are any good</span>
-        </div>
-      </article>
+      {roles.map(role => (
+        <article className="role" key={role.job_id}>
+          <div className="role-top">
+            <h3>{role.url ? <a href={role.url} style={{ color: 'inherit' }}>{role.title}</a> : role.title}</h3>
+            <span className="co">{role.company}</span>
+          </div>
+          {role.meta && <div className="role-meta">{role.meta}</div>}
+          <p className="why">{role.why}</p>
+          <div className="role-foot">
+            <span className={role.predicted === 'keep' ? 'pred keep' : 'pred skip'}>
+              {role.predicted === 'keep' ? 'Thinks you’ll want this' : 'Thinks you’ll pass'}
+              {role.score != null && ` · score ${role.score.toFixed(2)}`}
+            </span>
+            {!!(role.gaps || []).length && (
+              <span className="flag"><i />
+                They want {role.gaps.slice(0, 3).join(', ')} and you’ve never claimed
+                {role.gaps.length > 1 ? ' them' : ' it'}, so the application says so rather than bluffing
+              </span>
+            )}
+            {role.why_source === 'reconstructed' && (
+              <span className="flag" style={{ color: 'var(--ink-muted)' }}>
+                Rebuilt from the graph — the wording it showed you at the time was not stored
+              </span>
+            )}
+          </div>
+        </article>
+      ))}
     </section>
   );
 }
 
-function Knowledge() {
+function Knowledge({ k }) {
+  const r = k.readiness || {};
   return (
     <section className="panel">
       <div className="panel-head">
@@ -565,47 +762,67 @@ function Knowledge() {
         </div>
       </div>
       <div className="know">
-        <div className="krow"><dt>Facts about your experience you’ve confirmed</dt><dd>24</dd></div>
-        <div className="krow"><dt>Application answers it can reuse</dt><dd>7</dd></div>
-        <div className="krow"><dt>Rules about your taste you’ve agreed to</dt><dd>3</dd></div>
-        <div className="krow"><dt>Tasks it can now do from memory</dt><dd>3</dd></div>
+        <div className="krow"><dt>Facts about your experience you’ve confirmed</dt><dd>{k.claims}</dd></div>
+        <div className="krow"><dt>Application answers it can reuse</dt><dd>{k.answers}</dd></div>
+        <div className="krow"><dt>Rules about your taste you’ve agreed to</dt><dd>{k.rules}</dd></div>
+        <div className="krow"><dt>Tasks it can now do from memory</dt><dd>{k.plays}</dd></div>
         <div className="krow" style={{ display: 'block' }}>
           <dt style={{ display: 'block' }}>The rules you agreed to</dt>
-          <p className="note">Companies under 2,000 people. Nothing at staff level or above. Remote, or within reach of Seattle.</p>
+          <p className="note">
+            {(k.rule_texts || []).length
+              ? k.rule_texts.join('. ') + '.'
+              : 'None yet — it proposes one once it has seen a pattern in what you turn down.'}
+          </p>
         </div>
         <div className="krow" style={{ display: 'block' }}>
           <dt style={{ display: 'block' }}>Can it work out your preferences on its own yet?</dt>
-          <p className="note">Almost. You agreed with 4 of its last 5 guesses about your taste. It will ask your permission before it starts doing this without checking.</p>
-          <div className="meter" role="img" aria-label="4 of its last 5 guesses about your taste were right"><i style={{ width: '80%' }} /></div>
+          {r.value == null ? (
+            <p className="note">Not enough answers yet to tell. It needs resolved predictions before it can measure itself.</p>
+          ) : (
+            <Fragment>
+              <p className="note">
+                {r.state === 'Autonomous'
+                  ? `Yes — you turned this on. You agreed with ${r.agreed} of its last ${r.window} calls.`
+                  : `${r.value >= (r.threshold || 0.8) ? 'Almost.' : 'Not yet.'} You agreed with ${r.agreed} of its last ${r.window} calls about your taste. It will ask your permission before it starts doing this without checking.`}
+              </p>
+              <div className="meter" role="img"
+                   aria-label={`${r.agreed} of its last ${r.window} guesses about your taste were right`}>
+                <i style={{ width: Math.round(r.value * 100) + '%' }} />
+              </div>
+            </Fragment>
+          )}
         </div>
       </div>
     </section>
   );
 }
 
-function RunLog() {
+function RunLog({ runs, costBasis }) {
+  const cost = COST_LABEL[costBasis];
+  const costKey = costBasis === 'tool_calls' ? 'tool_calls' : 'tokens';
   return (
     <section className="panel">
       <div className="panel-head">
         <div>
           <h2>Day by day</h2>
-          <p>One row per day, exactly as it happened.</p>
+          <p>One row per day, exactly as it happened. A dash is a number the run did not produce.</p>
         </div>
       </div>
       <div className="tscroll"><table id="runlog">
         <thead><tr>
-          <th>Day</th><th>How it worked</th><th>Tokens</th><th>Time</th><th>Questions asked</th><th>Jobs you kept</th><th>Guessed right</th>
+          <th>Day</th><th>How it worked</th>{cost && <th>{cost.col}</th>}<th>Time</th>
+          <th>Questions asked</th><th>Jobs you kept</th><th>Guessed right</th>
         </tr></thead>
         <tbody>
-          {RUNS.map(r => (
-            <tr key={r.run}>
+          {runs.map(r => (
+            <tr key={r.day}>
               <td className="n">{r.day}</td>
-              <td><span className="mode-cell"><i style={{ background: MODES[r.mode].color }} />{MODES[r.mode].label}</span></td>
-              <td className="n">{fmt(r.tokens)}</td>
-              <td>{r.wall.toFixed(1)}s</td>
+              <td><span className="mode-cell"><i style={{ background: modeOf(r).color }} />{modeOf(r).label}</span></td>
+              {cost && <td className="n">{fmt(r[costKey])}</td>}
+              <td>{r.wall == null ? '—' : r.wall.toFixed(1) + 's'}</td>
               <td className="n">{r.questions}</td>
-              <td>{r.kept} of {r.shown}</td>
-              <td className="n">{Math.round(r.acc * 100)}%</td>
+              <td>{r.kept == null || r.shown == null ? '—' : `${r.kept} of ${r.shown}`}</td>
+              <td className="n">{pct(r.acc)}</td>
             </tr>
           ))}
         </tbody>
@@ -615,23 +832,74 @@ function RunLog() {
 }
 
 function App() {
+  /* Starts on the sample, clearly flagged as one, and swaps to the feed when it
+     arrives. There is no instant at which unlabelled sample data is on screen. */
+  const [doc, setDoc] = useState(SAMPLE);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const url = new URLSearchParams(location.search).get('data') || './data.json';
+    fetch(url, { cache: 'no-store' })
+      .then(res => res.ok ? res.json() : Promise.reject(new Error('HTTP ' + res.status)))
+      .then(data => { setDoc({ ...SAMPLE, ...data, live: true }); setError(''); })
+      .catch(err => setError(String(err.message || err)));
+  }, []);
+
+  const firstDay = doc.runs.length ? doc.runs[0].day : 1;
   return (
     <div className="wrap">
-      <Masthead />
-      <Stats />
-      <TrendPanel />
+      <Masthead doc={doc} />
+      <Stats stats={doc.stats} costBasis={doc.cost_basis} firstDay={firstDay} />
+      <TrendPanel doc={doc} />
       <div className="cols">
-        <Shortlist />
-        <Knowledge />
+        <Shortlist roles={doc.shortlist || []} />
+        <Knowledge k={doc.knowledge || {}} />
       </div>
-      <RunLog />
+      <RunLog runs={doc.runs} costBasis={doc.cost_basis} />
       <footer>
-        Every figure on this page is an example shipped with the interface, not a real job search. To make it live, replace the{' '}
-        <code>RUNS</code> array in the page source with a query against the <code>runs</code> table. Nothing else has to change.
+        {doc.live ? (
+          <Fragment>
+            Live, from the <code>runs</code> and <code>applications</code> tables and the
+            candidate graph, built {doc.generated_at} by <code>demo/dashboard.py</code>.
+            A dash is a number the run did not produce — nothing here is interpolated or
+            back-filled.
+          </Fragment>
+        ) : (
+          <Fragment>
+            Showing the sample shipped with the interface — the feed at <code>./data.json</code>{' '}
+            could not be read{error && <Fragment> (<code>{error}</code>)</Fragment>}. Build it
+            with <code>make dashboard</code>, then serve this folder over http rather than
+            opening the file directly.
+          </Fragment>
+        )}
       </footer>
     </div>
   );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+if (window.React && window.ReactDOM) {
+  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  window.__rendered = true;
+}
+</script>
+
+<!-- Plain JavaScript on purpose. The diagnostic cannot live in the block above:
+     that block is compiled by Babel, so if Babel is the script that failed — the
+     likeliest of the three, it is 2.9MB against react's 11KB — nothing in it
+     runs at all and the reader is left staring at "Loading the live figures…"
+     forever. This runs whatever loaded and whatever didn't. -->
+<script>
+window.addEventListener('load', function () {
+  if (window.__rendered) return;
+  var missing = (window.__missing || []);
+  if (!missing.length && !window.Babel) missing = ['babel-standalone'];
+  document.getElementById('root').innerHTML =
+    '<div class="wrap"><div class="eyebrow">Muscle Memory</div>' +
+    '<p class="sub">This page could not load <code>' +
+    (missing.join(', ') || 'its JavaScript') +
+    '</code> from cdnjs.cloudflare.com, so the live figures cannot be drawn here. ' +
+    'The numbers themselves are fine and are not stored in this page: ' +
+    '<code>make dashboard</code> writes them to <code>dashboard/data.json</code> ' +
+    'whether or not the browser can reach a CDN.</p></div>';
+});
 </script>

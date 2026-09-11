@@ -40,7 +40,8 @@ from agent.feedback import (
     record_reply,
     record_response,
 )
-from agent.pipeline import judge_the_day, prepare_pack
+from agent.pipeline import (close_day, judge_the_day, open_day, open_pass,
+                            prepare_pack, rank_day)
 from agent.predict import predict
 from agent.rank import _title_class
 from insight.queries import catalogue as sql_catalogue
@@ -288,7 +289,13 @@ def _save_pending(items: Sequence[Mapping[str, Any]]) -> None:
 @mcp.tool
 def judge_day(advance: bool = True, title_like: str = "", location: str = "",
               remote_only: bool = False) -> dict[str, Any]:
-    """P-A: advance the clock, rank the pool, predict, and write the runs row."""
+    """P-A in one call: advance the clock, rank the pool, write the runs row.
+
+    Prefer ``day_open`` → ``day_rank`` → ``day_close``. This does the same work
+    in one request, which on a cold day is long enough for an agent turn to time
+    out — and a turn that times out here has done every expensive thing and
+    recorded none of it.
+    """
     result = judge_the_day(ctx.insight, ctx.store, DayClock.load(), advance=advance,
                            remember=ctx.remember, plays=ctx.plays,
                            title_like=title_like, location=location,
@@ -298,6 +305,51 @@ def judge_day(advance: bool = True, title_like: str = "", location: str = "",
     if result.autonomy_prompt:
         payload["autonomy_prompt_text"] = result.autonomy_prompt
     return payload
+
+
+@mcp.tool
+def day_open(advance: bool = True) -> dict[str, Any]:
+    """P-A step 1 of 3: open the day. Returns the ``run_id`` the next two need.
+
+    Advances the clock and asks Rote for a play. Fast by construction — it
+    touches no data — so the turn that starts a day cannot be the one that dies.
+    """
+    pass_ = open_day(ctx.store, DayClock.load(), advance=advance, plays=ctx.plays)
+    return {"run_id": pass_.run_id, "day": pass_.day,
+            "play": pass_.match.summary(), "next": "day_rank"}
+
+
+@mcp.tool
+def day_rank(run_id: str, title_like: str = "", location: str = "",
+             remote_only: bool = False) -> dict[str, Any]:
+    """P-A step 2 of 3: rank the pool for an open day and return the slate.
+
+    The long call. Nothing is logged yet — if this returns and the turn then
+    dies, ``day_close`` still lands the row without re-ranking.
+    """
+    pass_ = open_pass(run_id)
+    result = rank_day(pass_, ctx.insight, ctx.store, title_like=title_like,
+                      location=location, remote_only=remote_only)
+    payload = result.summary()
+    payload["digest"] = result.digest_text
+    if result.autonomy_prompt:
+        payload["autonomy_prompt_text"] = result.autonomy_prompt
+    payload["next"] = "day_close"
+    return payload
+
+
+@mcp.tool
+def day_close(run_id: str) -> dict[str, Any]:
+    """P-A step 3 of 3: write the runs row and note the play that did the work.
+
+    The row is the chart (DESIGN §7), so this is the call that makes the day
+    real. Cheap: two writes and a flush.
+    """
+    pass_ = open_pass(run_id)
+    result = close_day(pass_, ctx.insight, ctx.store, remember=ctx.remember,
+                       plays=ctx.plays)
+    return {"run_id": result.run_id, "day": result.day, "mode": result.metrics.mode,
+            "logged": True, "play": result.play}
 
 
 @mcp.tool
@@ -383,11 +435,29 @@ def log_run_metrics(row: dict[str, Any]) -> dict[str, Any]:
     return {"logged": result.get("rows", 0), "run_id": row.get("run_id")}
 
 
+# What the three lines are drawn from. `runs_series` selects the whole row so
+# that an additive migration cannot empty the chart, but a tool that hands every
+# column into agent context is spending the very tokens it exists to measure —
+# so the projection lives here, at the boundary, rather than in the query.
+CHART_FIELDS = (
+    "run_id", "started_at", "day", "mode", "pipeline", "wall_ms",
+    "tokens_in", "tokens_out", "tool_calls", "steps_reasoned", "steps_replayed",
+    "questions_asked", "human_touches", "shown", "actual_keep",
+    "precision_at_5", "prediction_accuracy",
+)
+
+
 @mcp.tool
 def chart_data(limit: int = 200) -> dict[str, Any]:
-    """The three lines, straight out of the runs table."""
+    """The three lines, straight out of the runs table.
+
+    Projected to ``CHART_FIELDS`` on the way out. Columns the live table does
+    not have yet are simply absent rather than null-padded, because a tool that
+    reports a column it cannot actually read is worse than one that is quiet.
+    """
     rows = ctx.insight.run("runs_series", {"limit": limit})
-    return {"runs": len(rows), "series": _cap(rows, limit)}
+    series = [{key: row[key] for key in CHART_FIELDS if key in row} for row in rows]
+    return {"runs": len(rows), "series": _cap(series, limit)}
 
 
 def main() -> None:

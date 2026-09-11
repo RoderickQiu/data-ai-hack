@@ -7,7 +7,12 @@ data/job_snapshots/
 data/state/
 data/raw/
 data/*.parquet
+data/runs-backup-*.json
 data/chart.html
+# Built by `make dashboard` from the live tables. Generated, and it carries a
+# real candidate's run history — the page falls back to its own sample when
+# this is absent, so a clone without it still renders.
+dashboard/data.json
 
 # .pipe files are committed with ${VAR} placeholders, never real keys —
 # see rocketride/pipelines.py write_pipe_files(redact=True).

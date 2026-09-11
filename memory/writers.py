@@ -119,15 +119,23 @@ def record_signal(store: GraphStore, job_id: str, kind: str, day: int,
 
 
 def record_prediction(store: GraphStore, job_id: str, predicted: str, day: int,
-                      score: float, run_id: str = "") -> None:
+                      score: float, run_id: str = "",
+                      reasons: Sequence[str] = ()) -> None:
     """What the agent guessed, before the human saw the digest.
 
     Written as an edge with the prediction on it so the agreement record that
     autonomy is earned from is a graph fact, not a log line (DESIGN §8).
+
+    ``reasons`` is the "why" line as it was shown — ``explain`` composes it from
+    the live ``Prediction`` at digest time, and without storing it here nothing
+    can reconstruct the sentence the human actually read. A reconstruction from
+    the graph is a different sentence, and only one of the two is evidence of
+    what was on the screen.
     """
     candidate = store.candidate_node()
     store.merge_edge(candidate, "PREDICTED_KEEP", nid("job", job_id),
-                     predicted=predicted, score=round(score, 4), day=day, run_id=run_id)
+                     predicted=predicted, score=round(score, 4), day=day,
+                     run_id=run_id, reasons=[str(r) for r in reasons if r] or None)
 
 
 def record_answer_to_prediction(store: GraphStore, job_id: str, actual: str,

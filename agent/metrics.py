@@ -44,6 +44,10 @@ class RunMetrics:
     run_id: str = field(default_factory=lambda: f"run-{uuid.uuid4().hex[:10]}")
     started_at: str = field(default_factory=now_iso)
     mode: str = "first_run"
+    # Which pipeline is writing this row. `day` is not a key — P-A judges the
+    # day and each P-B prepares a pack — so without this nothing downstream can
+    # tell a judgment pass from a pack, or roll a day up into one chart point.
+    pipeline: str = "P-A"
 
     tokens_in: int = 0
     tokens_out: int = 0
@@ -153,10 +157,11 @@ class RunMetrics:
         self.settle_mode()
         data = {
             "run_id": self.run_id, "started_at": self.started_at, "day": self.day,
-            "mode": self.mode, "wall_ms": self.wall_ms(),
+            "mode": self.mode, "pipeline": self.pipeline, "wall_ms": self.wall_ms(),
             "tokens_in": self.tokens_in, "tokens_out": self.tokens_out,
             "steps_reasoned": self.steps_reasoned, "steps_replayed": self.steps_replayed,
             "plays_used": ",".join(self.plays_used),
+            "tool_calls": self.tool_calls, "tool_bytes": self.tool_bytes,
             "questions_asked": self.questions_asked, "human_touches": self.human_touches,
             "values_from_memory": self.values_from_memory,
             "values_replayed": self.values_replayed,

@@ -15,6 +15,7 @@ with a live run pending (DESIGN §11).
 from __future__ import annotations
 
 import json
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -161,24 +162,82 @@ class RocketRide:
         boundary instead and say on the slide that the cost line is a proxy —
         lines 2 and 3 are unaffected, which is the other reason for having three
         (DESIGN §11). ``pipeflow.byPipe`` is where per-node counters live.
+
+        There is no usage route in the OpenAPI, so every key below is a guess
+        about an undocumented shape and ``reported`` is the only thing a caller
+        should branch on. Two places are searched: the per-node ``byPipe``
+        counters, and a top-level ``usage`` object if one exists. Splitting the
+        total into ``tokens_in``/``tokens_out`` is best-effort — a counter that
+        does not say which direction it measures lands in ``tokens_out``,
+        because a run's output is the part that grows, and a wrong split still
+        sums right.
+
+        **The bare top-level ``tokens`` field is deliberately not harvested.**
+        ``python -m rocketride status`` reports it as the credit balance, and a
+        balance on the token axis would be a falling line that means the exact
+        opposite of what the chart claims. It is returned as ``credits`` instead,
+        so a live probe can show it without it reaching a run row.
         """
         flow = status.get("pipeflow") or {}
         by_pipe = flow.get("byPipe") or {}
         found: dict[str, Any] = {}
-        for name, pipe in by_pipe.items():
-            if not isinstance(pipe, Mapping):
-                continue
-            for key, value in pipe.items():
-                if "token" in key.lower() or "usage" in key.lower():
-                    found[f"{name}.{key}"] = value
+
+        def _harvest(prefix: str, source: Any, inside: bool = False) -> None:
+            """``inside`` means we are already within a ``usage``-shaped object,
+            where every number counts — ``{"tokenUsage": {"in": 4, "out": 6}}``
+            names the direction on the leaf and the unit on the parent."""
+            if not isinstance(source, Mapping):
+                return
+            for key, value in source.items():
+                name = f"{prefix}{key}" if prefix else str(key)
+                counts = inside or _counts_tokens(key)
+                if isinstance(value, Mapping):
+                    if counts:
+                        _harvest(f"{name}.", value, inside=True)
+                elif counts and _is_count(value):
+                    found[name] = value
+
+        _harvest("", status.get("usage"), inside=True)
+        for pipe_name, pipe in by_pipe.items():
+            _harvest(f"{pipe_name}.", pipe)
+
+        tokens_in = sum(int(v) for k, v in found.items() if _direction(k) == "in")
+        tokens_out = sum(int(v) for k, v in found.items() if _direction(k) != "in")
         return {
             "reported": bool(found),
             "counters": found,
+            "tokens_in": tokens_in,
+            "tokens_out": tokens_out,
+            "credits": status.get("tokens"),
             "words": status.get("wordsCount"),
             "total_pipes": flow.get("totalPipes"),
             "wall_ms": int(((status.get("endTime") or time.time())
                             - (status.get("startTime") or 0)) * 1000),
         }
+
+
+_IN_WORDS = ("in", "input", "prompt", "request")
+
+
+def _counts_tokens(key: Any) -> bool:
+    lowered = str(key).lower()
+    return "token" in lowered or "usage" in lowered
+
+
+def _is_count(value: Any) -> bool:
+    """A token counter is a number. ``True`` is not one, and neither is a name."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _direction(key: str) -> str:
+    """Which half of the token count a counter name refers to.
+
+    Only the last word segment is read: ``chat.promptTokens`` is input and
+    ``prompt.completionTokens`` is not, and looking at the whole dotted path
+    would get both of those backwards.
+    """
+    tail = re.split(r"[._\-]|(?<=[a-z])(?=[A-Z])", key)[-2:]
+    return "in" if any(part.lower() in _IN_WORDS for part in tail) else "out"
 
 
 def _answer_count(status: Mapping[str, Any]) -> int:

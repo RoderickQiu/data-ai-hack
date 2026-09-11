@@ -34,8 +34,10 @@ from agent.clock import DayClock
 from agent.config import env
 from agent.feedback import record_response
 from agent.pipeline import judge_the_day
+from agent.schema import USAGE_RUN_SUFFIX, is_usage_row, now_iso
 from insight.store import Insight
 from memory.graph import GraphStore
+from rocketride.client import RocketRide, RocketRideError
 
 
 def webhook_url(raw: str) -> str:
@@ -68,6 +70,70 @@ def tick_webhook(url: str, payload: Mapping[str, Any], bearer: str = "",
         return json.loads(body)
     except json.JSONDecodeError:
         return {"status": response.status, "body": body[:400]}
+
+
+def token_of(url: str) -> str:
+    """The task token out of the webhook URL the loop is already ticking.
+
+    ``up`` prints ``…/webhook?token=tk_…`` and that token is the handle for
+    ``GET /task`` — so the loop can read a run's usage back without being told
+    anything it does not already have.
+    """
+    query = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)
+    return (query.get("token") or [""])[0]
+
+
+def attribute_usage(insight: Insight, client: RocketRide, token: str,
+                    limit: int = 500) -> dict[str, Any]:
+    """Read one run's token usage off the engine and put it on the chart.
+
+    The tokens the pitch is actually about are spent by the orchestrator on the
+    far side of the MCP boundary, so ``RunMetrics`` never sees them and the run
+    row it writes carries zero. This closes that gap after the fact: poll
+    ``GET /task``, ask :meth:`RocketRide.usage` whether the engine reports
+    counters, and if it does, attach them to the run that just happened.
+
+    **Written as its own row rather than as an edit to the run's**, permanently
+    and not just until ``log_run``'s append-with-``key`` semantics are pinned
+    down. A distinct ``run_id`` is correct whether that is an upsert or a plain
+    append, so verifying it would buy nothing; summing is what a day roll-up
+    does anyway, so a second row is the natural shape rather than a workaround;
+    and an upsert would mutate a row after the run that produced it had
+    finished, which is the thing the plan rejects a write-back for in the first
+    place. The suffix is ``schema.USAGE_RUN_SUFFIX`` because the reader has to
+    agree with this exactly — two copies of that string drifting apart shows up
+    as a day counted twice, which is the hardest kind of wrong number to spot on
+    a chart.
+
+    Returns the usage dict. ``reported: False`` is the answer that matters —
+    it means the cost line has to be the MCP-boundary proxy instead, and the
+    dashboard's ``cost_basis`` will say so rather than captioning a proxy as a
+    token count.
+    """
+    usage = RocketRide.usage(client.status(token))
+    if not usage["reported"]:
+        return usage
+    rows = insight.run("runs_series", {"limit": limit})
+    # A usage row is not a run, so it is not a candidate to attach usage to —
+    # otherwise a second poll would write `<run>-usage-usage` and count the same
+    # tokens twice on the same day.
+    runs = [row for row in rows if row.get("run_id") and not is_usage_row(row)]
+    if not runs:
+        return {**usage, "attached_to": None}
+    latest = max(runs, key=lambda row: str(row.get("started_at") or ""))
+    run_id = f"{latest['run_id']}{USAGE_RUN_SUFFIX}"
+    insight.log_run({
+        "run_id": run_id, "started_at": now_iso(), "day": latest.get("day"),
+        "mode": latest.get("mode"), "pipeline": latest.get("pipeline") or "P-A",
+        "wall_ms": 0, "tokens_in": usage["tokens_in"], "tokens_out": usage["tokens_out"],
+        "steps_reasoned": 0, "steps_replayed": 0, "plays_used": "",
+        "tool_calls": 0, "tool_bytes": 0, "questions_asked": 0, "human_touches": 0,
+        "values_from_memory": 0, "values_replayed": 0, "values_reasoned": 0,
+        "jobs_released_today": 0, "pool_size": 0, "shown": 0,
+        "predicted_keep": 0, "actual_keep": 0,
+        "precision_at_5": None, "prediction_accuracy": None,
+    })
+    return {**usage, "attached_to": latest["run_id"], "run_id": run_id}
 
 
 def tick_local(insight: Insight, store: GraphStore, clock: DayClock,
@@ -125,6 +191,8 @@ def main() -> None:
     parser.add_argument("--local", action="store_true",
                         help="run in process instead (debugging harness only)")
     parser.add_argument("--auto-feedback", action="store_true")
+    parser.add_argument("--no-usage", action="store_true",
+                        help="skip the GET /task usage read after each webhook tick")
     args = parser.parse_args()
 
     if not args.local and not args.webhook:
@@ -141,6 +209,22 @@ def main() -> None:
     if args.local:
         insight, store, clock = Insight(), GraphStore(), DayClock.load()
 
+    # The usage read is best effort and never blocks a tick: it needs a token in
+    # the webhook URL and credentials the tunnel may not have here, and a loop
+    # that dies because it could not read a counter is worse than a chart with
+    # the cost panel suppressed.
+    usage_client: RocketRide | None = None
+    task_token = "" if args.local else token_of(args.webhook)
+    if not args.local and not args.no_usage:
+        if not task_token:
+            print("note: no token in the webhook URL — usage cannot be read; "
+                  "the dashboard will report cost_basis 'unavailable'")
+        else:
+            try:
+                usage_client, insight = RocketRide(), insight or Insight()
+            except Exception as exc:
+                print(f"note: usage read disabled ({type(exc).__name__}: {exc})")
+
     tick = 0
     while args.ticks == 0 or tick < args.ticks:
         tick += 1
@@ -153,6 +237,18 @@ def main() -> None:
                 result = tick_webhook(args.webhook, {"action": "next_day"},
                                       bearer=env("ROCKETRIDE_APIKEY"))
             print(f"[tick {tick}] {json.dumps(result, default=str)[:400]}")
+            if usage_client is not None:
+                # Printed on every tick whether or not it reported, because
+                # "the engine does not publish token counters" is the finding
+                # that decides what the chart's first axis is allowed to say.
+                try:
+                    usage = attribute_usage(insight, usage_client, task_token)
+                    print(f"[tick {tick}] usage reported={usage['reported']} "
+                          f"in={usage.get('tokens_in')} out={usage.get('tokens_out')} "
+                          f"counters={list(usage.get('counters') or {})[:6]}")
+                except Exception as exc:      # including RocketRideError
+                    print(f"[tick {tick}] usage unavailable "
+                          f"{type(exc).__name__}: {str(exc)[:160]}")
         except Exception as exc:            # a failed tick must not end the loop
             print(f"[tick {tick}] FAILED {type(exc).__name__}: {exc}")
         if args.ticks and tick >= args.ticks:

@@ -655,5 +655,81 @@ class GraphSerializationTests(unittest.TestCase):
         self.assertEqual(rebuilt.stats()["edges"], store.graph.stats()["edges"])
 
 
+def _backend_setup():
+    """Load the setup script by path — its filename is not a module name."""
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parent.parent / "scripts" / "backend-setup.py"
+    spec = importlib.util.spec_from_file_location("backend_setup", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class MigrationDiscardTests(unittest.TestCase):
+    """What `--migrate-runs` would delete. It gates a write over a live table,
+    so the split is a pure function and it is tested."""
+
+    def test_only_the_named_probe_rows_are_dropped(self):
+        setup = _backend_setup()
+        rows = [{"run_id": "run-real", "day": 7},
+                {"run_id": sorted(setup.DISCARD_RUN_IDS)[0], "day": 97},
+                {"run_id": "run-also-real", "day": 8}]
+        keep, drop = setup.discard_plan(rows, horizon=30)
+        self.assertEqual([r["run_id"] for r in keep], ["run-real", "run-also-real"])
+        self.assertEqual(len(drop), 1)
+
+    def test_an_unknown_row_past_the_horizon_is_reported_but_kept(self):
+        """The horizon is a canary for junk nobody has noticed, not a delete
+        rule — a migration must not invent rows to destroy."""
+        setup = _backend_setup()
+        rows = [{"run_id": "run-mystery", "day": 98}]
+        keep, drop = setup.discard_plan(rows, horizon=30)
+        self.assertEqual(len(keep), 1, "kept, because nobody said to delete it")
+        self.assertEqual(drop, [])
+
+    def test_nothing_to_do_is_an_empty_plan(self):
+        setup = _backend_setup()
+        keep, drop = setup.discard_plan([{"run_id": "run-real", "day": 3}], horizon=30)
+        self.assertEqual(len(keep), 1)
+        self.assertEqual(drop, [])
+
+
+class HydraMetadataTests(unittest.TestCase):
+    """The encode/decode pair the HydraDB mirror round-trips props through.
+
+    These exist because the encoder's docstring said "JSON-encoded" while the
+    code returned a dict, and nothing caught the divergence until a live push
+    400'd. HydraDB caps metadata nesting at depth 1, so a list one level inside
+    `metadata.props` rejects the *whole batch* — and `reasons` on a
+    PREDICTED_KEEP edge is a list, which makes it the ordinary path rather than
+    an exotic one.
+    """
+
+    def test_props_are_encoded_as_a_scalar_not_a_nested_dict(self):
+        from memory.graph import _props_for_metadata
+
+        encoded = _props_for_metadata({"predicted": "keep", "reasons": ["a", "b"]})
+        self.assertIsInstance(encoded, str,
+                              "a dict here nests one level deep and 400s the batch")
+
+    def test_a_list_valued_prop_survives_the_round_trip(self):
+        from memory.graph import _props_for_metadata
+
+        props = {"predicted": "keep", "score": 0.83, "day": 1,
+                 "reasons": ["under 2,000 people", "warm path via Stripe"]}
+        restored = json.loads(_props_for_metadata(props))
+        self.assertEqual(restored, props)
+
+    def test_the_longest_value_is_dropped_to_fit_the_cap(self):
+        from memory.graph import HYDRA_METADATA_MAX, _props_for_metadata
+
+        props = {"keep": "short", "description": "x" * (HYDRA_METADATA_MAX + 500)}
+        restored = json.loads(_props_for_metadata(props))
+        self.assertEqual(restored, {"keep": "short"},
+                         "a key dropped for length beats a batch that never lands")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -25,7 +25,7 @@ import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from html import unescape
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 ATS_SOURCES = ("greenhouse", "lever", "ashby")
 
@@ -47,23 +47,55 @@ APPLICATIONS_COLUMNS = (
 )
 
 RUNS_COLUMNS = (
-    "run_id", "started_at", "day", "mode",
+    # `pipeline` is what makes a day separable from a row. P-A judges the day,
+    # each P-B prepares a pack, and a day is all of them — without this column
+    # `day` is not a key and nothing can roll a day up (docs/dashboard-backend-plan.md).
+    "run_id", "started_at", "day", "mode", "pipeline",
     "wall_ms", "tokens_in", "tokens_out", "steps_reasoned", "steps_replayed", "plays_used",
+    # The MCP-boundary proxy for cost, counted always and used when the
+    # orchestrator does not report token usage. Stored beside the real thing
+    # rather than instead of it, so a proxy can never be read as a token count.
+    "tool_calls", "tool_bytes",
     "questions_asked", "human_touches",
     "values_from_memory", "values_replayed", "values_reasoned",
     "jobs_released_today", "pool_size", "shown", "predicted_keep", "actual_keep",
     "precision_at_5", "prediction_accuracy",
 )
 
+PIPELINES = ("P-A", "P-B", "P-C")
+
+# Orchestrator token usage is read back from RocketRide *after* the run that
+# spent it has already written its row, so it arrives as its own row keyed
+# `<run_id>-usage` rather than as an edit to that row — correct whether hotdata
+# treats `append` with a key as an upsert or as a plain append, which is not
+# something we have verified (docs/dashboard-backend-plan.md §2 and §6).
+#
+# It is a cost attachment, not a run: every other counter on it is zero. Anything
+# rolling runs up has to add its tokens but not count it as an invocation, so the
+# suffix lives here rather than being spelled out in the writer and the reader
+# separately — two copies of a convention like this drift, and the failure is a
+# silently double-counted day.
+USAGE_RUN_SUFFIX = "-usage"
+
+
+def is_usage_row(row: Mapping[str, Any]) -> bool:
+    """True for a cost-attachment row written by ``demo.loop.attribute_usage``."""
+    return str(row.get("run_id") or "").endswith(USAGE_RUN_SUFFIX)
+
 # hotdata infers a column's type from the first load, and a column that arrives
 # as all-nulls becomes varchar — after which the first real integer is rejected
 # with "can't change type from varchar to int64". So the bootstrap row that
 # creates a table has to carry a correctly typed value in *every* column, not
 # just the ones it has something to say about.
+#
+# The seed only fixes the *first* load; `COLUMN_TYPES` below is what fixes every
+# load after it.
 RUNS_SEED: dict[str, Any] = {
     "run_id": "bootstrap", "started_at": "1970-01-01T00:00:00+00:00", "day": 0,
-    "mode": "first_run", "wall_ms": 0, "tokens_in": 0, "tokens_out": 0,
+    "mode": "first_run", "pipeline": "P-A",
+    "wall_ms": 0, "tokens_in": 0, "tokens_out": 0,
     "steps_reasoned": 0, "steps_replayed": 0, "plays_used": "",
+    "tool_calls": 0, "tool_bytes": 0,
     "questions_asked": 0, "human_touches": 0,
     "values_from_memory": 0, "values_replayed": 0, "values_reasoned": 0,
     "jobs_released_today": 0, "pool_size": 0, "shown": 0, "predicted_keep": 0,
@@ -74,6 +106,45 @@ APPLICATIONS_SEED: dict[str, Any] = {
     "id": "bootstrap", "job_id": "bootstrap", "event": "seen", "reason_tags": "",
     "reason": "", "at": "1970-01-01T00:00:00+00:00", "day": 0, "run_id": "bootstrap",
     "decided_by": "human", "predicted": "", "actual": "",
+}
+
+# The declared type of every column across the three tables.
+#
+# hotdata infers a column's type from the file it is loaded from, and that
+# inference is per-load, not per-table: a column that arrives all-null in *one*
+# load is inferred as varchar and the load is then rejected against the real
+# column ("can't change type from float64 to varchar"). That is not a rare case
+# — `precision_at_5` and `prediction_accuracy` are legitimately null on every
+# run the human has not answered yet, which is most of them, so the run that
+# should have started the chart is exactly the run that fails to log.
+#
+# Omitting the null columns is not a way out: hotdata rejects a short upload
+# with "an append must carry every column the table has". So the load file has
+# to *declare* its types instead of having them guessed, which means writing
+# parquet rather than JSON (insight/store.py). This map is the declaration.
+COLUMN_TYPES: dict[str, str] = {
+    # jobs
+    "id": "str", "source": "str", "ats_type": "str", "company": "str",
+    "company_slug": "str", "title": "str", "location": "str", "remote": "bool",
+    "salary_min": "int", "salary_max": "int", "description": "str", "url": "str",
+    "posted_at": "str", "release_day": "int", "first_seen_run": "str",
+    "last_seen_run": "str", "company_size": "int", "industry": "str",
+    "seniority": "str",
+    # applications
+    "job_id": "str", "event": "str", "reason_tags": "str", "reason": "str",
+    "at": "str", "day": "int", "run_id": "str", "decided_by": "str",
+    "predicted": "str", "actual": "str",
+    # runs
+    "started_at": "str", "mode": "str", "pipeline": "str", "wall_ms": "int",
+    "tokens_in": "int", "tokens_out": "int", "steps_reasoned": "int",
+    "steps_replayed": "int", "plays_used": "str", "tool_calls": "int",
+    "tool_bytes": "int", "questions_asked": "int", "human_touches": "int",
+    "values_from_memory": "int", "values_replayed": "int", "values_reasoned": "int",
+    "jobs_released_today": "int", "pool_size": "int", "shown": "int",
+    "predicted_keep": "int", "actual_keep": "int",
+    # The two that exposed all of this. Null on every unanswered run, and null
+    # is the honest value — see agent/metrics.py on why neither may be 0.0.
+    "precision_at_5": "float", "prediction_accuracy": "float",
 }
 
 APPLICATION_EVENTS = (

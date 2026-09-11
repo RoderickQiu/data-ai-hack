@@ -196,23 +196,35 @@ _TEMPLATES: tuple[NamedQuery, ...] = (
     _q(
         "predictions_window",
         """SELECT job_id, predicted, actual, day, run_id
-           FROM {A} WHERE event = 'seen' AND predicted IS NOT NULL AND actual IS NOT NULL
+           FROM {A} WHERE predicted IS NOT NULL AND actual IS NOT NULL
            ORDER BY day DESC, at DESC LIMIT {limit}""",
         ("limit",),
-        "The agreement record autonomy readiness is computed from.",
+        "Every resolved prediction: what the agent guessed against what the "
+        "human did. The agreement record autonomy readiness is computed from, "
+        "and what the dashboard derives its accuracy line from — the runs row "
+        "is written before the human answers and carries neither.",
         limit=TUNABLES.d1_window,
     ),
     _q(
         "runs_series",
-        """SELECT run_id, started_at, day, mode, wall_ms, tokens_in, tokens_out,
-                  steps_reasoned, steps_replayed, questions_asked, human_touches,
-                  precision_at_5, prediction_accuracy
-           FROM {R} WHERE run_id <> 'bootstrap'
+        """SELECT * FROM {R} WHERE run_id <> 'bootstrap'
            ORDER BY started_at LIMIT {limit}""",
         ("limit",),
         "Every point on the three-line chart. The bootstrap row that created the "
         "table is not a run and is excluded: only numbers a run produced go on "
-        "the chart.",
+        "the chart. The whole row is selected — the only star in the catalogue — "
+        "because `runs` is the one table that gains columns as the build goes on, "
+        "and a named column list would turn every additive migration into a "
+        "chart that reads empty until the table is recreated. The reader takes "
+        "columns by name and tolerates the ones a pre-migration table lacks. "
+        "The cost, stated plainly: this is the one query for which this module's "
+        "'same name, same params, same result' promise does not hold, because the "
+        "result shape now follows the table rather than the template. So it is "
+        "also the one query that must not be captured as a Rote play — a replay "
+        "would reproduce the column set of whichever table it was recorded "
+        "against. Consumers project what they need on the way out "
+        "(mcp_server.CHART_FIELDS, demo/dashboard.py) rather than trusting the "
+        "shape they are handed.",
         limit=500,
     ),
     _q(

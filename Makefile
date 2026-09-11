@@ -9,7 +9,8 @@ PIP := .venv/bin/pip
 
 .DEFAULT_GOAL := help
 .PHONY: help setup test security verify status tables sync corpus serve tunnel pipes \
-	pipeline-up pipeline-ask pipeline-down loop chart graph-up graph-down clean
+	pipeline-up pipeline-ask pipeline-down loop chart dashboard dashboard-serve \
+	graph-up graph-down clean
 
 help:  ## List the targets
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sed 's/:.*## /\t/' | expand -t22
@@ -67,6 +68,13 @@ loop-local:  ## Same loop in process. Debugging harness only, never the demo pat
 
 chart:  ## Build data/chart.html from the runs table
 	$(PY) -m demo.chart
+
+dashboard:  ## Build dashboard/data.json from the runs table, applications and the graph
+	$(PY) -m demo.dashboard
+
+dashboard-serve: dashboard  ## Build the feed and serve the dashboard at :8080
+	@echo "open http://127.0.0.1:$${DASHBOARD_PORT:-8080}/"
+	cd dashboard && $(CURDIR)/$(PY) -m http.server $${DASHBOARD_PORT:-8080}
 
 graph-up:  ## Start the HydraDB OSS engine so the named queries run as real Cypher
 	docker run -d --name hydradb-oss -p 7687:7687 -p 8443:8443 \

@@ -252,10 +252,16 @@ def record_slate(store: GraphStore, result: RankResult, run_id: str) -> None:
     """Write the predictions before the human sees the digest.
 
     Order matters: a prediction logged after the response is not a prediction.
+
+    The reasons go on the edge with the guess. They are computed once, here, at
+    digest time from the live ``Prediction``; storing them is the difference
+    between showing the sentence the human read and reconstructing a weaker one
+    from the graph later (docs/dashboard-backend-plan.md §5).
     """
     from memory.writers import record_prediction
 
     for prediction in result.slate:
         record_prediction(store, prediction.job_id, prediction.predicted,
-                          day=result.day, score=prediction.score, run_id=run_id)
+                          day=result.day, score=prediction.score, run_id=run_id,
+                          reasons=prediction.reasons)
     store.flush()
