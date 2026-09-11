@@ -8,3 +8,6 @@ data/state/
 data/raw/
 data/*.parquet
 data/chart.html
+
+# .pipe files are committed with ${VAR} placeholders, never real keys —
+# see rocketride/pipelines.py write_pipe_files(redact=True).

@@ -1,0 +1,169 @@
+{
+  "name": "P-B apply pack",
+  "description": "One LLM call wrapped in four deterministic tool calls.",
+  "version": 1,
+  "source": "src",
+  "components": [
+    {
+      "id": "src",
+      "provider": "webhook",
+      "config": {
+        "type": "webhook",
+        "mode": "Source",
+        "hideForm": true
+      },
+      "ui": {
+        "position": {
+          "x": 0,
+          "y": 160
+        }
+      }
+    },
+    {
+      "id": "q",
+      "provider": "question",
+      "config": {
+        "type": "question"
+      },
+      "ui": {
+        "position": {
+          "x": 260,
+          "y": 160
+        }
+      },
+      "input": [
+        {
+          "lane": "text",
+          "from": "src"
+        }
+      ]
+    },
+    {
+      "id": "agent",
+      "provider": "agent_rocketride",
+      "config": {
+        "type": "agent_rocketride",
+        "instructions": "You are a job-hunting agent working for one candidate.\n\nBefore doing anything, call find_play with the task type — an exact match\nreplays with no reasoning, a partial match tells you which fields are novel.\n\nAsk for queries by name with hotdata_query and hydra_query; call list_queries if\nyou need the names. Never compose SQL or Cypher: there is no tool that takes it.\nTools return ids and one-line summaries. Call job_detail only when you genuinely\nneed a job's text.\n\nJudging a day is judge_day. Preparing a pack is apply_pack. Recording what the\nhuman said is record_feedback. Prefer one of those to assembling the steps\nyourself — they are the paths that replay.\n\nNever submit an application anywhere. Prepare the pack, log it, hand it over.\n\nPrepare an apply-pack for the job id in the question. Call apply_pack. If it\ncomes back with ok=false, say so and give the failure reason verbatim — a pack\nthat failed its citation check must never be presented as a draft. List any\nquestions it still needs from the human.",
+        "max_waves": 12,
+        "agent_description": "Job-hunting agent with graph and corpus memory"
+      },
+      "ui": {
+        "position": {
+          "x": 540,
+          "y": 160
+        }
+      },
+      "input": [
+        {
+          "lane": "questions",
+          "from": "q"
+        }
+      ]
+    },
+    {
+      "id": "llm",
+      "provider": "llm_openai_api",
+      "config": {
+        "type": "llm_openai_api",
+        "profile": "custom",
+        "custom": {
+          "apikey": "${QWEN_API_KEY}",
+          "base_url": "${QWEN_BASE_URL}",
+          "model": "${QWEN_MODEL}",
+          "modelSource": "custom",
+          "modelTotalTokens": 131072,
+          "enable_thinking": false
+        }
+      },
+      "ui": {
+        "position": {
+          "x": 420,
+          "y": 440
+        }
+      },
+      "control": [
+        {
+          "classType": "llm",
+          "from": "agent"
+        }
+      ]
+    },
+    {
+      "id": "mem",
+      "provider": "memory_internal",
+      "config": {
+        "type": "memory_internal"
+      },
+      "ui": {
+        "position": {
+          "x": 640,
+          "y": 440
+        }
+      },
+      "control": [
+        {
+          "classType": "memory",
+          "from": "agent"
+        }
+      ]
+    },
+    {
+      "id": "mcp",
+      "provider": "mcp_client",
+      "config": {
+        "type": "mcp_client",
+        "serverName": "data-ai-hack",
+        "transport": "streamable-http",
+        "http": {
+          "endpoint": "${MCP_ENDPOINT}",
+          "bearer": "${MCP_BEARER_TOKEN}",
+          "headers": {}
+        }
+      },
+      "ui": {
+        "position": {
+          "x": 860,
+          "y": 440
+        }
+      },
+      "control": [
+        {
+          "classType": "tool",
+          "from": "agent"
+        }
+      ]
+    },
+    {
+      "id": "out",
+      "provider": "response_json",
+      "config": {
+        "type": "response_json",
+        "laneName": "answers"
+      },
+      "ui": {
+        "position": {
+          "x": 880,
+          "y": 160
+        }
+      },
+      "input": [
+        {
+          "lane": "answers",
+          "from": "agent"
+        }
+      ]
+    }
+  ],
+  "viewport": {
+    "x": 0,
+    "y": 0,
+    "zoom": 0.8
+  },
+  "snapToGrid": true,
+  "snapGridSize": [
+    20,
+    20
+  ],
+  "editorMode": "design",
+  "project_id": "ef99ae1f-3b41-4b96-b30d-890feebe6bc1"
+}

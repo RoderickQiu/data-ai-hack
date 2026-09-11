@@ -136,6 +136,7 @@ memory/     cognee client + typed model, the candidate graph and its named queri
 insight/    hotdata client, the named SQL, the three tables, the corpus projection,
             company headcounts (the one field no ATS board publishes)
 mcp_server/ FastMCP server and the Rote wrapper
+rocketride/ the three pipelines as .pipe files, the task client, and a CLI
 demo/       the timed loop driver and the three-line chart
 tests/      78 offline tests — no network, no credentials
 ```
@@ -164,6 +165,58 @@ make tunnel      # public URL for the staging pipeline; put the bearer in mcp_cl
 makes every point on the chart a real RocketRide run. `make loop-local` runs the
 same pass in process — the debugging harness from DESIGN §11, never the demo
 path. `make chart` builds `data/chart.html` from the `runs` table.
+
+### RocketRide: getting a pipeline to actually run
+
+The engine runs on **staging**, so it can only reach the MCP server through a
+public URL. Three terminals:
+
+```bash
+make serve                                   # MCP server on :8787
+make tunnel                                  # ngrok (or cloudflared) -> public URL
+export MCP_ENDPOINT=https://<tunnel-host>/mcp
+make pipes                                   # write the .pipe files with that endpoint
+make pipeline-up                             # start P-A, prints token + webhook URL
+make pipeline-ask TOKEN=tk_... Q="judge today"
+make pipeline-down TOKEN=tk_...              # always: an open source burns credits
+```
+
+Verified live on 2026-09-11 — the agent on staging called our tunnelled MCP
+server and answered from the real corpus: *"There are 1,886 jobs and 19
+companies in the corpus"* and *"63 jobs were released on day 7"*, both through
+named queries, both matching what the same queries return locally.
+
+**Four things about the pipeline JSON that cost an afternoon each.** The shape
+is documented at `docs.rocketride.org/concepts/pipelines` and
+`/concepts/agents-tools-skills` — read those before changing
+`rocketride/pipelines.py`, because `POST /task` takes a freeform object and
+reports problems one at a time, in its own source file and line.
+
+- **`control` lives on the helper, not the agent.** The agent has input lanes
+  and nothing else; each LLM, memory and tool node carries
+  `control: [{"classType": "llm", "from": "agent"}]` pointing back at it. An
+  `invoke` list on the agent is accepted at submit and then fails at *run* time
+  with "You must have 1, and only 1 llm node connected to your agent".
+- **The webhook classifies by content type.** `Content-Type: text/plain` lands
+  on the `text` lane; a JSON body is accepted with `resultTypes: {}` and then
+  reaches no consumer at all — no answer, no error, nothing to debug.
+- **The webhook emits `text`, the agent only accepts `questions`**, so a
+  `question` node goes between them. Without it the run silently produces
+  nothing.
+- **`ui.position` per component, or the designer stacks every node at the
+  origin** and the canvas looks like one tangled box. The documented
+  `/webhook/{project_id}/{source_id}` route is 404 on staging; use the legacy
+  `/webhook?token=`.
+
+The `.pipe` files are committed with `${QWEN_API_KEY}`-style placeholders and
+filled from `.env` at submit time, so the IDE designer can list and edit them
+without a key ever reaching git.
+
+**Still open:** `judge_day` as a single tool call ranks 1,886 rows and extracts
+requirements for 30 of them, which is slow enough that the agent's turn can time
+out. The pass itself is verified end to end locally and writes real `runs` rows;
+splitting it into narrower tools, or pre-warming the requirement extraction, is
+the next step before the timed loop runs against it.
 
 ### Where the two halves meet
 
