@@ -96,6 +96,13 @@ def post_day(cfg: Config, insight, store, clock=None, advance: bool = True) -> d
     from agent.pipeline import judge_the_day
     from memory.autonomy import D1_SHORTLIST, evaluate
 
+    # This is the shared surface: the tables it writes are the ones everyone
+    # else's chart is drawn from, and the day counter is a local file. Sync
+    # before judging or a second machine stamps today's session on day 1
+    # (agent/clock.py:catch_up). Skipped when re-judging a pinned day.
+    if clock is not None and advance:
+        clock.catch_up(insight)
+
     result = judge_the_day(insight, store, clock, advance=advance)
     posted = call(cfg, "/digest", bridge.digest_payload(result).model_dump())
 

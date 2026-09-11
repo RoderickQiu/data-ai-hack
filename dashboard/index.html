@@ -1069,15 +1069,15 @@ function Stats({
     id: "s-questions",
     label: "Questions it asked",
     value: fmt(stats.questions.value)
-  }, "It asked you ", /*#__PURE__*/React.createElement("b", null, fmt(stats.questions.first)), " on day ", firstDay), /*#__PURE__*/React.createElement(Stat, {
+  }, "It asked you ", /*#__PURE__*/React.createElement("b", null, fmt(stats.questions.first)), " on day ", stats.questions.first_day ?? firstDay), /*#__PURE__*/React.createElement(Stat, {
     id: "s-acc",
     label: "Guessed your choice",
     value: pct(stats.accuracy.value)
-  }, stats.accuracy.first == null ? 'No resolved predictions yet' : /*#__PURE__*/React.createElement(Fragment, null, "It was right ", /*#__PURE__*/React.createElement("b", null, pct(stats.accuracy.first)), " of the time at first")), /*#__PURE__*/React.createElement(Stat, {
+  }, stats.accuracy.first == null ? 'No resolved predictions yet' : /*#__PURE__*/React.createElement(Fragment, null, "On day ", stats.accuracy.day, ", the last day you answered. It was right ", /*#__PURE__*/React.createElement("b", null, pct(stats.accuracy.first)), " on day ", stats.accuracy.first_day)), /*#__PURE__*/React.createElement(Stat, {
     id: "s-touches",
     label: "Times you stepped in",
-    value: fmt(stats.touches.value)
-  }, "Down from ", /*#__PURE__*/React.createElement("b", null, fmt(stats.touches.first)), " on day ", firstDay));
+    value: stats.touches.measured ? fmt(stats.touches.value) : '—'
+  }, stats.touches.measured ? /*#__PURE__*/React.createElement(Fragment, null, "Down from ", /*#__PURE__*/React.createElement("b", null, fmt(stats.touches.first)), " on day ", stats.touches.first_day ?? firstDay) : /*#__PURE__*/React.createElement(Fragment, null, "Nobody answered on day ", stats.touches.day, "; it was ", /*#__PURE__*/React.createElement("b", null, fmt(stats.touches.first)), " on day ", stats.touches.first_day ?? firstDay)));
 }
 function Legend() {
   return /*#__PURE__*/React.createElement("div", {

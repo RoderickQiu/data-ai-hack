@@ -228,6 +228,17 @@ _TEMPLATES: tuple[NamedQuery, ...] = (
         limit=500,
     ),
     _q(
+        "latest_run_day",
+        """SELECT max(day) AS day FROM {R} WHERE run_id <> 'bootstrap'""",
+        (),
+        "How far the shared ledger has got. The day counter itself is a local "
+        "file (agent/clock.py), so a second machine joining the same tables "
+        "starts at day 1 and writes rows that collide with day 1 of everyone "
+        "else's history. This is what a live surface syncs against before it "
+        "judges, so a teammate's session lands after the story rather than on "
+        "top of its first page.",
+    ),
+    _q(
         "corpus_stats",
         """SELECT count(*) AS jobs, count(DISTINCT company) AS companies,
                   count(DISTINCT source) AS sources, max(release_day) AS horizon,

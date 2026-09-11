@@ -220,12 +220,20 @@ def headline(points: Sequence[Mapping[str, Any]], basis: str) -> dict[str, Any]:
     Always the same shape, nulls where there is no data — the page renders this
     straight and has no fallback arithmetic of its own, which is the point of
     having a feed at all.
+
+    Every number carries the day it was measured on. Accuracy is the one card
+    whose value is not the latest day's: a day nobody answered resolves no
+    predictions, so the figure shown is the last day that *has* one — which is
+    honest only if the card can say which day that was. ``touches`` carries
+    ``measured``: zero on a day with no human response at all means "nobody
+    opened the digest", not "it needed no help", and those must not read the
+    same on a slide.
     """
-    empty = {"value": None, "first": None}
+    empty = {"value": None, "first": None, "day": None, "first_day": None}
     if not points:
         return {"day": None, "cost": {**empty, "drop_pct": None},
                 "questions": dict(empty), "accuracy": dict(empty),
-                "touches": dict(empty)}
+                "touches": {**empty, "measured": False}}
 
     first, last = points[0], points[-1]
     known = [p for p in points if p.get("acc") is not None]
@@ -236,16 +244,29 @@ def headline(points: Sequence[Mapping[str, Any]], basis: str) -> dict[str, Any]:
         a, b = _num(a), _num(b)
         return round((a - b) / a * 100) if a else None
 
+    # The first day that has a human in it at all, not simply the first row.
+    # A day the human never answered has no "at first" to compare against, and
+    # a second machine joining on day 1 (agent/clock.py:catch_up) can put a
+    # session run minutes ago at the front of the series.
+    engaged = [p for p in points if p["touches"] or p.get("acc") is not None]
+    baseline = engaged[0] if engaged else first
+
     return {
         "day": last["day"],
         "cost": {"value": last.get(cost_key) if live_cost else None,
                  "first": first.get(cost_key) if live_cost else None,
+                 "day": last["day"], "first_day": first["day"],
                  "drop_pct": pct_drop(first.get(cost_key), last.get(cost_key))
                              if live_cost else None},
-        "questions": {"value": last["questions"], "first": first["questions"]},
+        "questions": {"value": last["questions"], "first": baseline["questions"],
+                      "day": last["day"], "first_day": baseline["day"]},
         "accuracy": {"value": known[-1]["acc"] if known else None,
-                     "first": known[0]["acc"] if known else None},
-        "touches": {"value": last["touches"], "first": first["touches"]},
+                     "first": known[0]["acc"] if known else None,
+                     "day": known[-1]["day"] if known else None,
+                     "first_day": known[0]["day"] if known else None},
+        "touches": {"value": last["touches"], "first": baseline["touches"],
+                    "day": last["day"], "first_day": baseline["day"],
+                    "measured": bool(last["touches"] or last.get("acc") is not None)},
     }
 
 

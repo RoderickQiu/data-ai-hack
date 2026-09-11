@@ -85,6 +85,19 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual([j.id for j in jobs], [j.id for j in again])
 
 
+class _Ledger:
+    """Whatever ``latest_run_day`` returns, including failing to return."""
+
+    def __init__(self, rows):
+        self.rows = rows
+
+    def run(self, name, params=None):
+        assert name == "latest_run_day"
+        if isinstance(self.rows, Exception):
+            raise self.rows
+        return self.rows
+
+
 class ClockTests(unittest.TestCase):
     def make_jobs(self, n: int) -> list[Job]:
         return [Job(id=f"greenhouse:acme:{i}", source=["greenhouse", "lever", "ashby"][i % 3],
@@ -106,6 +119,23 @@ class ClockTests(unittest.TestCase):
         clock = DayClock(day=30, horizon=30)
         clock.save = lambda: clock          # no disk in tests
         self.assertEqual(clock.advance(), 1)
+
+    def test_catch_up_moves_a_second_machine_onto_the_shared_day(self):
+        clock = DayClock(day=1, horizon=30)
+        clock.save = lambda: clock
+        self.assertEqual(clock.catch_up(_Ledger([{"day": 14}])), 14)
+
+    def test_catch_up_never_moves_a_clock_backwards(self):
+        clock = DayClock(day=15, horizon=30)
+        clock.save = lambda: clock
+        self.assertEqual(clock.catch_up(_Ledger([{"day": 9}])), 15)
+
+    def test_catch_up_keeps_the_local_day_when_the_ledger_is_unreadable(self):
+        clock = DayClock(day=4, horizon=30)
+        clock.save = lambda: clock
+        self.assertEqual(clock.catch_up(_Ledger([])), 4)
+        self.assertEqual(clock.catch_up(_Ledger([{"day": None}])), 4)
+        self.assertEqual(clock.catch_up(_Ledger(RuntimeError("hotdata down"))), 4)
 
 
 class QueryRendererTests(unittest.TestCase):

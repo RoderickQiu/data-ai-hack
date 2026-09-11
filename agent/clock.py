@@ -116,6 +116,33 @@ class DayClock:
         self.save()
         return self.day
 
+    def catch_up(self, insight) -> int:
+        """Pull the clock up to the shared ledger. Forward only; returns the day.
+
+        The clock is a local file and the ``runs`` table is shared, so a second
+        machine joining an existing story starts at day 1 and stamps its runs
+        and its human answers on top of day 1 of everyone else's — which lands
+        a session run minutes ago at the *left* end of the chart, and rewrites
+        the "at first" numbers the whole pitch rests on.
+
+        Forward only, and never past the horizon: a machine deliberately
+        re-judging an earlier day (``--no-advance``, the demo's ``set_day``)
+        keeps its pin, and nobody's clock is ever pushed back over a day they
+        have already written.
+        """
+        try:
+            rows = insight.run("latest_run_day")
+        except Exception:
+            return self.day                # ledger unreachable: keep the local day
+        latest = rows[0].get("day") if rows else None
+        if latest is None:
+            return self.day
+        behind = min(int(latest), self.horizon)
+        if behind <= self.day:
+            return self.day
+        self.day = behind
+        return self.save().day
+
     def set_day(self, day: int) -> int:
         """Pin the clock. Used by the demo, and by 'judge the same day again'."""
         self.day = max(1, min(day, self.horizon))
