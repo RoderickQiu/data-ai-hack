@@ -172,15 +172,32 @@ def merge_extracted(store: GraphStore, job_id: str,
     return {"requirements": len(requirements), "attributes": sorted(attributes)}
 
 
+_SENIORITY_WORDS = (("internship", "intern"), ("intern", "intern"),
+                    ("junior", "junior"), ("associate", "junior"),
+                    ("principal", "principal"), ("staff", "staff"),
+                    ("director", "director"), ("head of", "director"),
+                    ("vp", "executive"), ("vice president", "executive"),
+                    ("senior", "senior"), ("lead", "lead"), ("leader", "lead"),
+                    ("manager", "manager"))
+
+# Whole words only. Substring matching read "intern" out of "Internal" and
+# "International", and because intern is checked first — before staff and
+# principal — it won every time: "Staff Software Engineer - Database Engine
+# Internals" classified as an internship. 12 titles in the corpus, and the
+# seniority preference rules read this column.
+_SENIORITY_RE = {word: re.compile(rf"\b{re.escape(word)}\b") for word, _ in _SENIORITY_WORDS}
+
+
 def seniority_of(title: str) -> str:
-    """Coarse seniority from the title, for the preference rules to bite on."""
+    """Coarse seniority from the title, for the preference rules to bite on.
+
+    Returns ``"mid"`` when nothing matches. That is the *unclassified* bucket,
+    not a level — 45% of this corpus — so a caller inferring a preference from
+    it is inferring one from "the title said nothing".
+    """
     lowered = (title or "").lower()
-    for word, level in (("intern", "intern"), ("junior", "junior"), ("associate", "junior"),
-                        ("principal", "principal"), ("staff", "staff"),
-                        ("director", "director"), ("head of", "director"),
-                        ("vp ", "executive"), ("senior", "senior"), ("lead", "lead"),
-                        ("manager", "manager")):
-        if word in lowered:
+    for word, level in _SENIORITY_WORDS:
+        if _SENIORITY_RE[word].search(lowered):
             return level
     return "mid"
 

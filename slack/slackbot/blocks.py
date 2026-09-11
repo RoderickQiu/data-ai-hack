@@ -12,6 +12,9 @@ REASON_TAGS = [
     ("comp", "Compensation"),
 ]
 
+# Slack rejects a message with more than this many blocks.
+SLACK_BLOCK_LIMIT = 50
+
 DANGER_COLOR = "#d64541"
 GOOD_COLOR = "#2eb886"
 
@@ -56,12 +59,8 @@ def job_blocks(job: JobCard, run_id: str, day: str) -> list[dict[str, Any]]:
     title = f"*<{job.url}|{job.title}>* at *{job.company}*" if job.url else f"*{job.title}* at *{job.company}*"
 
     blocks: list[dict[str, Any]] = [{"type": "section", "text": _txt(title)}]
-    if meta:
-        blocks.append(_ctx(meta))
-    if job.why:
-        blocks.append({"type": "section", "text": _txt(f">{job.why}")})
 
-    signals = []
+    signals = [meta] if meta else []
     if job.prediction == "keep":
         conf = f" · {job.confidence:.0%} confident" if job.confidence is not None else ""
         signals.append(f":dart: I predict you'll *keep* this{conf}")
@@ -74,6 +73,8 @@ def job_blocks(job: JobCard, run_id: str, day: str) -> list[dict[str, Any]]:
         signals.append(":test_tube: control pick, held outside the ranking")
     if signals:
         blocks.append(_ctx(*signals))
+    if job.why:
+        blocks.append({"type": "section", "text": _txt(f">{job.why}")})
 
     v = {"j": job.job_id, "r": run_id, "d": day, "t": job.title, "c": job.company}
     blocks.append(
@@ -100,8 +101,12 @@ def digest_message(d: DigestIn) -> list[dict[str, Any]]:
     if d.decided_by_agent:
         blocks.append(_ctx(":robot_face: decided by agent — you have autonomy switched on for shortlisting"))
     for job in d.jobs:
-        blocks.append({"type": "divider"})
         blocks.extend(job_blocks(job, d.run_id, d.day))
+    if len(blocks) > SLACK_BLOCK_LIMIT:
+        raise ValueError(
+            f"{len(blocks)} blocks for {count} roles exceeds Slack's "
+            f"{SLACK_BLOCK_LIMIT}; reduce slate_size or the blocks per role"
+        )
     return blocks
 
 

@@ -13,6 +13,7 @@ import json
 import unittest
 
 from agent.clock import DayClock, assign_release_days, release_histogram
+from agent.config import TUNABLES
 from agent.metrics import RunMetrics, skip_class_accuracy
 from agent.predict import predict, requirement_coverage
 from agent.digest import parse_reply, tags_from_text
@@ -35,6 +36,7 @@ def make_store() -> GraphStore:
     """A store with no persistence and no mirror. Every test gets a clean graph."""
     store = GraphStore.__new__(GraphStore)
     from agent.config import Settings
+
     store.config = Settings()
     store.candidate_id = "cand-test"
     store.backend = LocalBackend(Graph(), mirror=None)
@@ -427,13 +429,16 @@ class SlateTests(unittest.TestCase):
     def ranked(self, n: int):
         return [predict({"id": f"j{i}"}, [], [], similarity=1 - i / n) for i in range(n)]
 
-    def test_two_of_five_come_from_outside_the_top(self):
+    def test_some_of_the_slate_comes_from_outside_the_top(self):
+        # Driven by the tunables rather than the numbers they happened to hold,
+        # so retuning the slate does not silently turn this into a no-op.
+        size, off = TUNABLES.slate_size, TUNABLES.slate_off_ranking
         ranked = self.ranked(20)
         slate = build_slate(ranked)
-        self.assertEqual(len(slate), 5)
-        top_ids = {p.job_id for p in ranked[:3]}
-        self.assertEqual(len({p.job_id for p in slate} & top_ids), 3)
-        self.assertEqual(len([p for p in slate if p.job_id not in top_ids]), 2)
+        self.assertEqual(len(slate), size)
+        top_ids = {p.job_id for p in ranked[:size - off]}
+        self.assertEqual(len({p.job_id for p in slate} & top_ids), size - off)
+        self.assertEqual(len([p for p in slate if p.job_id not in top_ids]), off)
 
     def test_slate_is_deterministic(self):
         first = [p.job_id for p in build_slate(self.ranked(20))]
