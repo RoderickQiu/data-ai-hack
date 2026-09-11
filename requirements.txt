@@ -6,3 +6,6 @@ cognee==1.5.4
 
 # Only needed for Option A (Vertex AI / Gemini). Harmless to install for Option B.
 google-cloud-aiplatform==2.1.0
+
+# HydraDB cloud client. The package is hydradb-sdk, the module is hydra_db.
+hydradb-sdk==2.1.4

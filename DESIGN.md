@@ -211,14 +211,30 @@ closing slide.
 
 Tonight, before the event (the spec asks for setup today):
 
-- Accounts and keys for all five plus Snyk. Rote hello play, post "ready &
-  warmed up" in Discord.
-- HydraDB: pick cloud vs Docker, confirm a Cypher round trip.
+- ~~Accounts and keys for all five plus Snyk.~~ Done; `sh scripts/verify-setup.sh`
+  re-checks all five against the live services. Rote hello play and the Discord
+  post still to do.
+- ~~HydraDB: pick cloud vs Docker.~~ **Cloud.** `default-tenant` on
+  `api.hydradb.com` (org `ww6ndjr2d5`) is deployed and `ready_for_ingestion`.
+  Still open: whether the cloud key gives Cypher access, or whether we are
+  limited to the SDK's `context`/`search` surface. If it is the latter, the
+  four demo Cypher queries need rewriting against `graph.relations` and
+  `graph.subgraph`, or we run the OSS engine in Docker alongside.
 - Spike: Cognee `neo4j` provider against HydraDB Bolt. Timebox 20 minutes.
-  Pre-write the JSON export sync as fallback regardless.
-- hotdata: `hotdata auth`, create a database, load one CSV, run one query.
-- RocketRide: staging key, run the hello pipeline, confirm `mcp_client`
-  reaches a local FastMCP server.
+  Pre-write the JSON export sync as fallback regardless. Note the cloud API
+  exposes no Bolt port, so this spike only applies to the Docker option.
+- ~~hotdata: create a database, load one CSV, run one query.~~ Done via REST
+  rather than CSV: `scripts/hotdata-setup.sh` connects the Greenhouse board API
+  as a `rest` datasource and loads 200 rows into `jobs.public.jobs`. That is
+  already ATS ingest rather than a throwaway smoke test, so the `ingest-ats`
+  play starts from a working selector. Still open: the canonical `jobs` schema
+  (right now the table is whatever Greenhouse returns) and the `applications`
+  and `runs` tables.
+- RocketRide: staging key works against `/services`. Still open: the credit
+  balance (dashboard-only, no endpoint reports it), running the hello pipeline,
+  and confirming `mcp_client` reaches a local FastMCP server. The pipeline JSON
+  shape is not in the OpenAPI spec — `POST /task` takes a freeform object and
+  only tells you what is missing, one error at a time.
 
 Event day, by hour:
 

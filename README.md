@@ -22,10 +22,22 @@ machine, so each of us has to complete every step below. Tick them off in order.
    `.env.example` explains each one.
    - `ROCKETRIDE_APIKEY` (dev connection, for running and iterating)
    - `ROCKETRIDE_DEPLOY_APIKEY` (deploy target only, never used for dev runs)
-   - `HYDRADB_APIKEY`
-   - `HOTDATA_APIKEY`
+   - `HYDRADB_APIKEY` (plus `HYDRA_DB_API_KEY`, same value, for RocketRide's node)
+   - `HOTDATA_API_KEY` — that spelling exactly. The CLI reads no other name, and
+     without it every command falls back to the browser session and dies with
+     "session expired or revoked".
 4. **Verify cognee** with the snippet in [Verify the setup](#verify-the-setup).
-5. **Install Rote and join the team org.** This is the Playoffs requirement; the
+5. **Set up hotdata.** Install the CLI, then let the script create the database,
+   connect the Greenhouse source, and load rows:
+
+   ```bash
+   brew install hotdata-dev/tap/cli
+   hotdata auth register              # browser, GitHub by default
+   sh scripts/hotdata-setup.sh        # database + data source + first ingest
+   ```
+
+   Copy the three ids it prints at the end back into `.env`.
+6. **Install Rote and join the team org.** This is the Playoffs requirement; the
    installer and sign-in are identity-gated and cannot be done for you. You will
    have received an invite email for the org, which makes you a member on sign-up.
 
@@ -45,7 +57,7 @@ machine, so each of us has to complete every step below. Tick them off in order.
 
    Your RocketRide key never leaves your machine; the shared adapter only names it.
    Details and troubleshooting are in [rote/README.md](rote/README.md).
-6. **Run the warm-up laps** in a fresh Claude Code conversation, then post
+7. **Run the warm-up laps** in a fresh Claude Code conversation, then post
    "warmed up" in the Playoffs Discord:
 
    ```
@@ -53,8 +65,31 @@ machine, so each of us has to complete every step below. Tick them off in order.
    /play run hello
    ```
 
-Done when: the cognee snippet names Ada Lovelace, `rote whoami` shows your email,
-`rote adapter list` shows `rocketride`, and `/play run hello` completes.
+Done when `sh scripts/verify-setup.sh` is all green and `/play run hello`
+completes.
+
+## Checking you are actually set up
+
+One script hits all five services for real. No check trusts a key just because
+it is in `.env`.
+
+```bash
+sh scripts/verify-setup.sh                 # all five, ~1 min
+SKIP_COGNEE=1 sh scripts/verify-setup.sh   # skip the slow ingest
+```
+
+| # | Service | What is checked | How to fix a FAIL |
+|---|---------|-----------------|-------------------|
+| 1 | RocketRide | bearer `GET /services` returns 200 | re-copy `ROCKETRIDE_APIKEY` from the dashboard |
+| 2 | HydraDB | `databases.status()` reports graph, scheduler and both vector stores up | check `HYDRADB_APIKEY` and `HYDRADB_DATABASE` |
+| 3 | hotdata | key authenticates, ≥1 data source, rows queryable | `sh scripts/hotdata-setup.sh` |
+| 4 | cognee | real `add` → `cognify` → `search` round trip | see [Verify the setup](#verify-the-setup) |
+| 5 | Rote | signed in, adapter installed, live authenticated call | `ROTE_ORG=data-ai-hack sh scripts/rote-setup.sh` |
+
+The one thing the script cannot check is the **RocketRide credit balance**. No
+endpoint reports it, and a task that fails for lack of credits looks exactly
+like a malformed pipeline. Confirm the coupon landed in the dashboard at
+[staging.rocketride.ai](https://staging.rocketride.ai).
 
 ### Org owner only (one person, already done once)
 
