@@ -483,6 +483,10 @@ const SAMPLE = {
       value: 0,
       first: 6
     },
+    precision: {
+      value: 0.94,
+      first: 0.50
+    },
     accuracy: {
       value: 0.90,
       first: 0.40
@@ -818,7 +822,12 @@ function AccuracyPlot({
     top = 22,
     bot = 122,
     hi = 1;
-  const values = runs.map(r => r.acc == null ? null : r.acc);
+  // Precision: of what it showed you, how much you did not reject. Falls
+  // back to accuracy for a feed built before precision existed.
+  const values = runs.map(r => {
+    const v = r.precision == null ? r.acc : r.precision;
+    return v == null ? null : v;
+  });
   const known = values.filter(v => v != null);
   const lo = Math.max(0, Math.min(0.3, Math.min(...(known.length ? known : [0.3])) - 0.1));
   const y = v => bot - (v - lo) / (hi - lo) * (bot - top);
@@ -913,7 +922,7 @@ function Tip({
     style: {
       background: m.color
     }
-  }), m.label), /*#__PURE__*/React.createElement("dl", null, costKey && /*#__PURE__*/React.createElement(Fragment, null, /*#__PURE__*/React.createElement("dt", null, costLabel), /*#__PURE__*/React.createElement("dd", null, fmt(r[costKey]))), /*#__PURE__*/React.createElement("dt", null, "Time taken"), /*#__PURE__*/React.createElement("dd", null, r.wall == null ? '—' : r.wall.toFixed(1) + 's'), /*#__PURE__*/React.createElement("dt", null, "Done from memory"), /*#__PURE__*/React.createElement("dd", null, pct(r.replay_ratio)), r.questions > 0 && /*#__PURE__*/React.createElement(Fragment, null, /*#__PURE__*/React.createElement("dt", null, "Questions asked"), /*#__PURE__*/React.createElement("dd", null, r.questions)), r.acc != null && /*#__PURE__*/React.createElement(Fragment, null, /*#__PURE__*/React.createElement("dt", null, "Guessed right"), /*#__PURE__*/React.createElement("dd", null, pct(r.acc))), /*#__PURE__*/React.createElement("dt", null, r.touches ? "Times you stepped in" : "Your input"), /*#__PURE__*/React.createElement("dd", null, r.touches || 'none needed')), r.note && /*#__PURE__*/React.createElement("p", {
+  }), m.label), /*#__PURE__*/React.createElement("dl", null, costKey && /*#__PURE__*/React.createElement(Fragment, null, /*#__PURE__*/React.createElement("dt", null, costLabel), /*#__PURE__*/React.createElement("dd", null, fmt(r[costKey]))), /*#__PURE__*/React.createElement("dt", null, "Time taken"), /*#__PURE__*/React.createElement("dd", null, r.wall == null ? '—' : r.wall.toFixed(1) + 's'), /*#__PURE__*/React.createElement("dt", null, "Done from memory"), /*#__PURE__*/React.createElement("dd", null, pct(r.replay_ratio)), r.questions > 0 && /*#__PURE__*/React.createElement(Fragment, null, /*#__PURE__*/React.createElement("dt", null, "Questions asked"), /*#__PURE__*/React.createElement("dd", null, r.questions)), r.precision != null && /*#__PURE__*/React.createElement(Fragment, null, /*#__PURE__*/React.createElement("dt", null, "Worth showing"), /*#__PURE__*/React.createElement("dd", null, pct(r.precision))), r.acc != null && /*#__PURE__*/React.createElement(Fragment, null, /*#__PURE__*/React.createElement("dt", null, "Guessed right"), /*#__PURE__*/React.createElement("dd", null, pct(r.acc))), /*#__PURE__*/React.createElement("dt", null, r.touches ? "Times you stepped in" : "Your input"), /*#__PURE__*/React.createElement("dd", null, r.touches || 'none needed')), r.note && /*#__PURE__*/React.createElement("p", {
     style: {
       margin: '8px 0 0',
       fontSize: '12px',
@@ -1001,9 +1010,9 @@ function Charts({
     className: "chart-row"
   }, /*#__PURE__*/React.createElement("div", {
     className: "eyebrow"
-  }, "It knows you better ", /*#__PURE__*/React.createElement("span", {
+  }, "It wastes less of your time ", /*#__PURE__*/React.createElement("span", {
     className: "read"
-  }, "how often it correctly guessed your decision")), /*#__PURE__*/React.createElement(AccuracyPlot, {
+  }, "of the roles it showed you, how many you did not reject")), /*#__PURE__*/React.createElement(AccuracyPlot, {
     runs: runs,
     hover: hover
   })), /*#__PURE__*/React.createElement(Tip, {
@@ -1093,9 +1102,9 @@ function Stats({
     value: fmt(memoryDays)
   }, "Of ", /*#__PURE__*/React.createElement("b", null, fmt(totalDays)), " days, it needed nothing new"), /*#__PURE__*/React.createElement(Stat, {
     id: "s-acc",
-    label: "Guessed your choice",
-    value: pct(stats.accuracy.value)
-  }, stats.accuracy.first == null ? 'No resolved predictions yet' : /*#__PURE__*/React.createElement(Fragment, null, "On day ", stats.accuracy.day, ", the last day you answered. It was right ", /*#__PURE__*/React.createElement("b", null, pct(stats.accuracy.first)), " on day ", stats.accuracy.first_day)), /*#__PURE__*/React.createElement(Stat, {
+    label: "Worth showing you",
+    value: pct((stats.precision || stats.accuracy).value)
+  }, (stats.precision || stats.accuracy).first == null ? 'Nothing answered yet' : /*#__PURE__*/React.createElement(Fragment, null, "Of what it put in front of you on day ", (stats.precision || stats.accuracy).day, ", you rejected none of it. It was ", /*#__PURE__*/React.createElement("b", null, pct((stats.precision || stats.accuracy).first)), " on day ", (stats.precision || stats.accuracy).first_day)), /*#__PURE__*/React.createElement(Stat, {
     id: "s-touches",
     label: stats.touches.measured ? "Times you stepped in" : "Days with no input from you",
     value: stats.touches.measured ? fmt(stats.touches.value) : fmt(memory.quiet)
@@ -1264,7 +1273,7 @@ function RunLog({
     className: "n"
   }, r.questions), /*#__PURE__*/React.createElement("td", null, r.kept == null || r.shown == null ? '—' : `${r.kept} of ${r.shown}`), /*#__PURE__*/React.createElement("td", {
     className: "n"
-  }, pct(r.acc))))))));
+  }, pct(r.precision == null ? r.acc : r.precision))))))));
 }
 function App() {
   /* Starts on the sample, clearly flagged as one, and swaps to the feed when it
