@@ -117,11 +117,12 @@ no publication date at all, so the schedule is auditable and swappable for the t
 it.** `published_today` and `first_published_today` are dropped: they are claims about the
 collection day and mean nothing under a release schedule.
 
-**Three hiring waves are placed by hand** — Figma on day 9, Notion on day 17, Linear on day 24 —
-because a uniformly random schedule makes the "company X opened several matching roles this week"
-signal fire on noise. These companies average under two roles a day, so a six-to-eight role day is
-a real spike. Daily totals are unchanged: waves are swapped in, not added. Edit `WAVES` in
-`scripts/build-release-table.py` to retarget them at the candidate's actual target companies.
+**Three hiring waves are placed by hand** — Perplexity on day 9, Ramp on day 17, Replit on
+day 24 — because a uniformly random schedule makes the "company X opened several matching roles
+this week" signal fire on noise. All three sit inside the seed persona's stated preferences
+(`candidate/README.md`) and average under two roles a day, so a six-to-seven role day is a real
+spike. Daily totals are unchanged: waves are swapped in, not added. Retarget `WAVES` in
+`scripts/build-release-table.py` whenever the candidate's target companies change.
 
 ```sql
 -- Everything released by run 9, newest release first.

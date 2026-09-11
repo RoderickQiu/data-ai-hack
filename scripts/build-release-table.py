@@ -36,7 +36,7 @@ SOURCE_COLUMNS = [
 ]
 # Hand-placed hiring waves. A uniformly random schedule makes the "company X opened 5+ matching
 # roles this week" insight fire on noise; the schedule is ours, so the waves should be deliberate.
-WAVES = [("Figma", 9, 8), ("Notion", 17, 7), ("Linear", 24, 6)]
+WAVES = [("Perplexity", 9, 7), ("Ramp", 17, 6), ("Replit", 24, 6)]
 
 
 def fetch(env, table, catalog):
@@ -117,7 +117,8 @@ def main():
     parser.add_argument("--days", type=int, default=30)
     parser.add_argument("--last-day", default=None, help="calendar date of the final release day (default: the snapshot's collected_date)")
     parser.add_argument("--seed", type=int, default=20260911)
-    parser.add_argument("--publish", action="store_true", help="write the result to a NEW Hotdata table")
+    parser.add_argument("--publish", action="store_true", help="write the result to a Hotdata table")
+    parser.add_argument("--replace", action="store_true", help="overwrite --table if it already exists")
     parser.add_argument("--cache", default=None, help="read/write the fetched source rows here instead of refetching")
     args = parser.parse_args()
 
@@ -160,7 +161,7 @@ def main():
     snapshot = ROOT / "data" / "job_snapshots" / args.table
     snapshot.mkdir(parents=True, exist_ok=True)
     (snapshot / "release_jobs.json").write_text(json.dumps(jobs, indent=2))
-    c.publish(jobs, snapshot, args.table)
+    c.publish(jobs, snapshot, args.table, allow_replace=args.replace)
 
 
 if __name__ == "__main__":

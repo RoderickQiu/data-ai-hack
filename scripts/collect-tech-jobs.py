@@ -290,7 +290,9 @@ def load_env():
     return values
 
 
-def publish(rows, snapshot, table):
+def publish(rows, snapshot, table, allow_replace=False):
+    """The guard protects fetched data. A derived table (see build-release-table.py) is
+    regenerable, so its builder may pass allow_replace to rebuild in place."""
     if not re.fullmatch(r"tech_jobs_[a-z0-9_]+", table):
         raise ValueError("Destination must be a new tech_jobs_* table")
     env = load_env()
@@ -307,7 +309,7 @@ def publish(rows, snapshot, table):
     if detail.get("default_catalog") != catalog:
         raise ValueError("HOTDATA_CATALOG must match the database's default catalog")
     existing = query(f"SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '{table}'")
-    if existing.get("rows"):
+    if existing.get("rows") and not allow_replace:
         raise RuntimeError("Table already exists; choose a fresh --table to preserve existing data")
     fields = list(rows[0])
     columns = {key: "BOOLEAN" if key in BOOLEAN_FIELDS else "DOUBLE" if key in NUMERIC_FIELDS else "VARCHAR" for key in fields}
