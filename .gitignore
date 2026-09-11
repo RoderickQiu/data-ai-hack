@@ -14,6 +14,9 @@ data/chart.html
 # real candidate's run history — the page falls back to its own sample when
 # this is absent, so a clone without it still renders.
 dashboard/data.json
+# A curated feed for a video. Fabricated numbers must never sit in the repo
+# where they could be taken for logged runs (DESIGN §7).
+dashboard/sample-data.json
 
 # .pipe files are committed with ${VAR} placeholders, never real keys —
 # see rocketride/pipelines.py write_pipe_files(redact=True).

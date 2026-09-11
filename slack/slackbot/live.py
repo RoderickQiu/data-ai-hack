@@ -67,9 +67,6 @@ class BackendSink(SignalSink):
                 call(self.cfg, "/preference", bridge.preference_payload(
                     hypothesis, run_id=record.get("run_id") or "").model_dump())
 
-            if result.get("resolved_predictions"):
-                update_run_metrics(self.insight, record.get("run_id") or "")
-
             if result.get("action") == "prepare_pack":
                 post_pack(self.cfg, self.insight, self.store,
                           result["job_id"], result["day"], run_id=result["run_id"])
