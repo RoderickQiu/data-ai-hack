@@ -23,8 +23,11 @@ import sys
 from pathlib import Path
 
 from agent.config import env, settings
+from agent.net import http_url
 from rocketride.client import RocketRide, RocketRideError
 from rocketride.pipelines import PIPELINES, load_pipe, write_pipe_files
+
+ROOT = Path(__file__).resolve().parent.parent
 
 
 def _endpoint(args: argparse.Namespace) -> str:
@@ -35,7 +38,27 @@ def _endpoint(args: argparse.Namespace) -> str:
             "  --endpoint https://<tunnel-host>/mcp\n"
             "or set MCP_ENDPOINT in .env. RocketRide runs on staging, so it can "
             "only reach the server through a public URL.")
-    return endpoint
+    # This value is not fetched here — it is written into a pipeline that
+    # RocketRide's own servers then call. A scheme they would resolve on their
+    # side, from our account, is worth refusing on ours.
+    try:
+        return http_url(endpoint, "MCP endpoint")
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
+
+def _pipe_path(value: Path) -> Path:
+    """A ``--pipe`` file, confined to the checkout.
+
+    ``write`` puts these under the repo and ``up`` reads them straight back, so
+    nothing legitimate points outside it; confining means a stray ``..`` fails
+    here rather than reading somewhere unexpected.
+    """
+    path = Path(value).expanduser()
+    path = (path if path.is_absolute() else ROOT / path).resolve()
+    if not path.is_relative_to(ROOT):
+        raise SystemExit(f"{str(value)!r} resolves outside the repository ({path})")
+    return path
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -78,11 +101,17 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "up":
         if args.pipe:
-            pipeline = load_pipe(args.pipe, mcp_endpoint=_endpoint(args))
+            # `--pipe` names a file this same CLI wrote, read under the operator's
+            # own uid; `_pipe_path` confines it to the checkout regardless.
+            # deepcode ignore PT: confined to the repo by _pipe_path, no trust boundary crossed
+            pipeline = load_pipe(_pipe_path(args.pipe), mcp_endpoint=_endpoint(args))
         elif args.name:
             pipeline = PIPELINES[args.name](_endpoint(args))
         else:
             raise SystemExit("pass --pipe <file> or --name P-A")
+        # The URL opened is ROCKETRIDE_URI, scheme-pinned in `RocketRide.__init__`.
+        # `--endpoint` travels in the request body, and `_endpoint` checked it.
+        # deepcode ignore Ssrf: host is ROCKETRIDE_URI, pinned in RocketRide.__init__
         task = client.submit(pipeline)
         client.wait_ready(task.token, timeout=120)
         print(f"token:   {task.token}")
@@ -93,6 +122,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "ask":
+        # Same pinned host; `RocketRide.ask` urlencodes the token into a query
+        # parameter, so it reaches neither the host nor the path.
+        # deepcode ignore Ssrf: host is ROCKETRIDE_URI, pinned in RocketRide.__init__
         result = client.ask(args.token, " ".join(args.question), timeout=args.timeout)
         for answer in result["answers"]:
             print(answer)

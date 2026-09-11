@@ -4,12 +4,21 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from agent.net import hostname
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LOCAL_ROOT = Path(__file__).resolve().parents[1]
 
 
 class ConfigError(RuntimeError):
     pass
+
+
+def _host(value: str) -> str:
+    try:
+        return hostname(value, "SLACK_API_HOST")
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from exc
 
 
 def _resolve(value: str) -> Path:
@@ -53,7 +62,10 @@ def load_config() -> Config:
         bot_token=os.environ["SLACK_BOT_TOKEN"],
         app_token=app_token,
         channel=os.environ["SLACK_CHANNEL"],
-        api_host=os.getenv("SLACK_API_HOST", "127.0.0.1"),
+        # A bare host, because live.call interpolates it into a URL: a value
+        # carrying a `/` or an `@` would move the request to another origin and
+        # take SLACK_API_TOKEN with it.
+        api_host=_host(os.getenv("SLACK_API_HOST", "127.0.0.1")),
         api_port=int(os.getenv("SLACK_API_PORT", "8765")),
         api_token=os.getenv("SLACK_API_TOKEN", "dev-local-token"),
         signal_log=_resolve(os.getenv("SIGNAL_LOG") or "data/signals.jsonl"),

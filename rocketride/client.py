@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 from agent.config import Settings, settings
+from agent.net import http_url
 
 
 class RocketRideError(RuntimeError):
@@ -42,11 +43,18 @@ class Task:
 class RocketRide:
     def __init__(self, config: Settings | None = None, timeout: float = 120.0):
         self.config = config or settings()
-        self.base = (self.config.rocketride_uri or "").rstrip("/")
         self.key = self.config.rocketride_api_key
         self.timeout = timeout
-        if not self.base or not self.key:
+        if not (self.config.rocketride_uri or "").strip() or not self.key:
             raise RocketRideError("ROCKETRIDE_URI / ROCKETRIDE_APIKEY are not set")
+        # Pinned before the first request, because every request below attaches
+        # the API key: a ROCKETRIDE_URI that is a typo, or a scheme urllib is
+        # willing to open but we never meant to, would send that key somewhere
+        # of someone else's choosing.
+        try:
+            self.base = http_url(self.config.rocketride_uri, "ROCKETRIDE_URI").rstrip("/")
+        except ValueError as exc:
+            raise RocketRideError(str(exc)) from exc
 
     def _call(self, method: str, path: str, body: Any = None,
               **query: Any) -> dict[str, Any]:

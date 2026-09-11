@@ -51,7 +51,7 @@ ANSWERED_FROM_MEMORY = ("standard_answer", "reused_answer")
 
 
 def question_id_for(text: str) -> str:
-    return "q-" + hashlib.sha1(text.strip().lower().encode()).hexdigest()[:10]
+    return "q-" + hashlib.sha256(text.strip().lower().encode()).hexdigest()[:10]
 
 
 # --- out: agent results -> Slack payloads ----------------------------------

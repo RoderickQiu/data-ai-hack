@@ -425,6 +425,9 @@ def main() -> None:
     if args.project and insight:
         from insight.project import project
         print(f"\nprojection {args.project} -> {insight.client.catalog}.public.{insight.jobs_table}")
+        # The table name goes through `insight.hotdata.qualify`, which fullmatches
+        # every part against a plain-identifier pattern before it reaches any SQL.
+        # deepcode ignore Sqli: table name validated by insight.hotdata.identifier
         report = project(args.project, insight, load=not args.dry_run)
         _tick(not report.unmapped, report.summary())
         if args.dry_run:

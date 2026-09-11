@@ -57,6 +57,9 @@ def repo_path(value, *parents):
     overwriting somewhere unexpected.
     """
     path = Path(value).expanduser()
+    # The join is provisional: the containment check below on the resolved result
+    # is what decides whether this path is used at all.
+    # deepcode ignore PT: result is confined to ROOT by the is_relative_to check below
     path = (path if path.is_absolute() else ROOT.joinpath(*parents, path)).resolve()
     if not path.is_relative_to(ROOT):
         raise SystemExit(f"{value!r} resolves outside the repository ({path})")

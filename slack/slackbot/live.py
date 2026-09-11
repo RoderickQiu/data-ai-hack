@@ -84,6 +84,9 @@ def call(cfg: Config, path: str, payload: Mapping[str, Any]) -> dict[str, Any]:
                  "Authorization": f"Bearer {cfg.api_token}"},
         method="POST",
     )
+    # `path` is a literal at every call site and `api_host` is checked as a bare
+    # host name at config load, so the origin here cannot be moved.
+    # deepcode ignore Ssrf: api_host validated by agent.net.hostname at config load
     with urllib.request.urlopen(request, timeout=60) as response:
         return json.loads(response.read())
 

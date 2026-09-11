@@ -33,6 +33,7 @@ from typing import Any, Mapping, Sequence
 from agent.clock import DayClock
 from agent.config import env
 from agent.feedback import record_response
+from agent.net import http_url
 from agent.pipeline import judge_the_day
 from agent.schema import USAGE_RUN_SUFFIX, is_usage_row, now_iso
 from insight.store import Insight
@@ -45,15 +46,10 @@ def webhook_url(raw: str) -> str:
 
     The value arrives from the command line or ``ROCKETRIDE_WEBHOOK_URL``, and
     the request carries ``ROCKETRIDE_APIKEY`` in a header — so the scheme has to
-    be pinned. urllib will happily open ``file://`` or ``ftp://`` from the same
-    call, which would turn a typo'd env var into a local file read with a
-    credential attached. http is allowed because the tunnel is sometimes plain
-    http in the room; anything else is a mistake, not a configuration.
+    be pinned. :func:`agent.net.http_url` is the check; it lives there because
+    ``rocketride.client`` needs exactly the same one for ``ROCKETRIDE_URI``.
     """
-    parsed = urllib.parse.urlsplit((raw or "").strip())
-    if parsed.scheme not in ("http", "https") or not parsed.hostname:
-        raise ValueError(f"{raw!r} is not an http(s) webhook URL")
-    return parsed.geturl()
+    return http_url(raw, "webhook URL")
 
 
 def tick_webhook(url: str, payload: Mapping[str, Any], bearer: str = "",
@@ -64,6 +60,7 @@ def tick_webhook(url: str, payload: Mapping[str, Any], bearer: str = "",
         headers={"Content-Type": "application/json",
                  **({"Authorization": f"Bearer {bearer}"} if bearer else {})},
     )
+    # deepcode ignore Ssrf: scheme and host pinned by webhook_url three lines up
     with urllib.request.urlopen(request, timeout=timeout) as response:
         body = response.read().decode()
     try:
