@@ -165,26 +165,53 @@ class Rote:
         return _parse_play_list(self._run(["play", "list"])["stdout"])
 
     def run_play(self, ref: str, params: Mapping[str, Any] | None = None) -> dict[str, Any]:
-        argv = ["play", "run", ref]
+        """Replay a play. Parameters are ``key=value``, not ``--key value``.
+
+        Verified against 0.82.0: ``--day 9`` is read as an unknown flag and the
+        run fails with "missing required parameter(s): day" — which reads like
+        the play is broken rather than like the call is.
+        """
+        # `--yes` because a registry ref prompts before it installs, and there
+        # is no terminal on the MCP path: without it every replay of a published
+        # play fails with "interactive prompt required but stdin is not a
+        # terminal". The approval it skips is the install of a play this
+        # repo published to its own org.
+        argv = ["play", "run", ref, "--yes"]
         for key, value in (params or {}).items():
-            argv += [f"--{key}", str(value)]
-        result = self._run(argv)
+            argv.append(f"{key}={value}")
+        result = self._run(argv, cwd=Path.cwd())
         result["ok"] = result["code"] == 0
         return result
 
-    def crystallize(self, name: str, description: str) -> dict[str, Any]:
-        """Turn the workspace's captured path into a play stub.
+    def crystallize(self, name: str, description: str,
+                    params: Sequence[str] = ()) -> dict[str, Any]:
+        """Turn the workspace's captured path into a play file.
 
-        ``play pending write`` does not itself create the play: it prints the
-        pre-filled ``play template create`` command. That two-step is
-        deliberate on Rote's side and we keep it — the stub survives a context
-        reset, and a human sees what is about to be published.
+        ``rote export <output.ts>`` is the real command — there is no
+        ``play pending write`` on 0.82.0. Two things the export will not do for
+        you, both of which block ``play release``:
+
+        * it reduces a recorded interpreter to a bare PATH name, so a venv
+          python becomes the host python and the play runs without our deps;
+        * a recorded absolute path is refused by lint as host-specific.
+
+        Both are fixed by capturing the path as a ``$param`` — which is why
+        ``scripts/judge-day.py`` takes the repo root as one.
         """
-        return self._run(["play", "pending", "write", "--name", name,
-                          "--description", description])
+        argv = ["export", f"{name}.ts", "-d", description]
+        if params:
+            argv += ["--params", ",".join(params)]
+        return self._run(argv)
 
-    def export(self) -> dict[str, Any]:
-        return self._run(["workspace", "export"])
+    def publish(self, path: str | Path, namespace: str,
+                private: bool = True) -> dict[str, Any]:
+        """Push a released play to the org. The namespace is the org slug alone
+        — ``data-ai-hack``, never ``data-ai-hack/judge-day``, which is rejected
+        as an unknown namespace. The play's name comes from its frontmatter."""
+        argv = ["registry", "play", "push", str(path), namespace]
+        if private:
+            argv.append("--private")
+        return self._run(argv, cwd=Path.cwd())
 
 
 # Rote answers in its own block format — `@@status`, a count line, then prose —
