@@ -195,7 +195,7 @@ _TEMPLATES: tuple[NamedQuery, ...] = (
     ),
     _q(
         "predictions_window",
-        """SELECT job_id, predicted, actual, day, run_id
+        """SELECT job_id, predicted, actual, event, day, run_id
            FROM {A} WHERE predicted IS NOT NULL AND actual IS NOT NULL
            ORDER BY day DESC, at DESC LIMIT {limit}""",
         ("limit",),

@@ -176,7 +176,12 @@ class RunMetrics:
         if not answered:
             return {}
         self.actual_keep = sum(1 for r in answered if r["actual"] == "keep")
-        self.precision_at_5 = round(self.actual_keep / len(answered), 4)
+        # "How many the human did not reject" (DESIGN §7), which is what the
+        # number is for: was the slate worth showing? It counted keeps only,
+        # so a role the human skipped for the afternoon scored against the
+        # slate exactly as hard as one they rejected outright.
+        rejected = sum(1 for r in answered if r.get("event") == "not_for_me")
+        self.precision_at_5 = round((len(answered) - rejected) / len(answered), 4)
         self.prediction_accuracy = prediction_accuracy(answered)
         self.human_touches += len(answered)
         return {"precision_at_5": self.precision_at_5,
@@ -237,6 +242,14 @@ def prediction_accuracy(responses: Sequence[Mapping[str, Any]]) -> float | None:
     for row in responses:
         predicted, actual = row.get("predicted"), row.get("actual")
         if not predicted or not actual:
+            continue
+        # A skip is "not now" and carries no preference weight (DESIGN §6.3),
+        # so it is not evidence that showing the role was a mistake. Only a
+        # keep and a not-for-me say anything about whether the call was right,
+        # and scoring the neutral middle as a miss is what made an agent look
+        # wrong for surfacing something the human simply did not get to.
+        # Rows predating the event column fall back to the old reading.
+        if row.get("event") == "skipped":
             continue
         by_actual.setdefault(actual, []).append(predicted == actual)
     if not by_actual:

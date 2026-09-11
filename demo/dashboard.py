@@ -110,6 +110,13 @@ def quality_by_day(insight: Insight, limit: int = 2000) -> dict[int, dict[str, A
         day: {
             "answered": len(group),
             "kept": sum(1 for row in group if row.get("actual") == "keep"),
+            # What the human did not reject, out of what they were shown
+            # (DESIGN §7). The question a user actually has — did this waste my
+            # time — as against accuracy, which asks the harder internal one:
+            # did it know in advance. A role skipped for the afternoon is not a
+            # role rejected, so it counts as time well spent.
+            "precision": round(
+                sum(1 for row in group if row.get("event") != "not_for_me") / len(group), 4),
             # None when the slate produced no skips. "No data" and "got them all
             # wrong" are different facts and only one belongs on a chart.
             "accuracy": prediction_accuracy(group),
@@ -167,6 +174,7 @@ def roll_up(rows: Sequence[Mapping[str, Any]],
             "shown": _int(judged.get("shown")) or _int(answers.get("answered")) or None,
             "kept": answers.get("kept", _int(judged.get("actual_keep")) or None),
             "acc": answers.get("accuracy"),
+            "precision": answers.get("precision"),
             "replay_ratio": round(replayed / (replayed + reasoned), 3)
                             if replayed + reasoned else 0.0,
         })
@@ -235,11 +243,13 @@ def headline(points: Sequence[Mapping[str, Any]], basis: str) -> dict[str, Any]:
     empty = {"value": None, "first": None, "day": None, "first_day": None}
     if not points:
         return {"day": None, "cost": {**empty, "drop_pct": None},
-                "questions": dict(empty), "accuracy": dict(empty),
+                "questions": dict(empty), "precision": dict(empty),
+                "accuracy": dict(empty),
                 "touches": {**empty, "measured": False}}
 
     first, last = points[0], points[-1]
     known = [p for p in points if p.get("acc") is not None]
+    rated = [p for p in points if p.get("precision") is not None]
     live_cost = basis != "unavailable"
     cost_key = "tokens" if basis == "tokens" else "tool_calls"
 
@@ -272,6 +282,16 @@ def headline(points: Sequence[Mapping[str, Any]], basis: str) -> dict[str, Any]:
                              if live_cost else None},
         "questions": {"value": last["questions"], "first": baseline["questions"],
                       "day": last["day"], "first_day": baseline["day"]},
+        # The headline is precision: of what it put in front of you, how much
+        # you did not reject. That is the question a user has. Accuracy — did
+        # it call your answer in advance — is the harder internal measure and
+        # rides alongside, because a day you keep everything is a perfect slate
+        # and a poor prediction, and a card showing only the second reads as
+        # failure on the best day the thing has had.
+        "precision": {"value": rated[-1]["precision"] if rated else None,
+                      "first": rated[0]["precision"] if rated else None,
+                      "day": rated[-1]["day"] if rated else None,
+                      "first_day": rated[0]["day"] if rated else None},
         "accuracy": {"value": known[-1]["acc"] if known else None,
                      "first": known[0]["acc"] if known else None,
                      "day": known[-1]["day"] if known else None,
