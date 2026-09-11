@@ -38,6 +38,32 @@ class HotdataError(RuntimeError):
     pass
 
 
+# A catalog or table name that is going to be interpolated into SQL text. The
+# query API takes a SQL string, not bound identifiers, so a name that reaches a
+# query is checked against this first and rejected if it is anything but a plain
+# identifier. Table names normally come from config; ``--project`` and
+# ``--source-table`` let an operator name one on the command line.
+_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def identifier(name: str, what: str = "identifier") -> str:
+    """Return ``name`` unchanged if it is a plain SQL identifier, else raise."""
+    if not _IDENTIFIER.fullmatch(name or ""):
+        raise HotdataError(f"{name!r} is not a plain {what}")
+    return name
+
+
+def qualify(table: str, catalog: str, schema: str = "public") -> str:
+    """``catalog.public.table`` from a bare name, or a checked dotted name."""
+    parts = (table or "").split(".")
+    if len(parts) == 1:
+        parts = [catalog, schema, parts[0]]
+    if len(parts) != 3:
+        raise HotdataError(f"{table!r} is not a table name: expected `table` "
+                           "or `catalog.schema.table`")
+    return ".".join(identifier(part, "part of a table name") for part in parts)
+
+
 # Everything the index treats as an operator. Stripped rather than escaped:
 # BM25 over a job description wants terms, and a résumé has no query intent.
 _QUERY_SYNTAX = re.compile(r"[-+:^~*?\\/\"\'()\[\]{}<>|&!#=,;]")
@@ -215,4 +241,4 @@ class Hotdata:
         return {"output": self._run(args, parse_json=False).strip()[:200]}
 
     def qualified(self, table: str) -> str:
-        return f"{self.catalog}.public.{table}"
+        return qualify(table, self.catalog)

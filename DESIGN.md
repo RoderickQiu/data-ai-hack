@@ -576,6 +576,7 @@ bolted on after a finding:
 | Credential exposure | The agent holds no job-board credentials because every source is keyless. `.env` out of git (already done) |
 | PII leakage | Resume content stays in our stores. `runs` rows carry counts, never content. No PII in URLs or logs |
 | XSS from board HTML | JD HTML is sanitized before storage and before it is rendered anywhere |
+| Operator input reaching SQL or the filesystem | Every value a human types that cannot be bound as a parameter is checked at the edge: table names (`--project`, `--source-table`, `HOTDATA_CATALOG`) must be plain identifiers, `--cache` is confined to the checkout, a Rote workspace is one path component under `ROTE_HOME`, and `--webhook` must be `http(s)` with a host. This was `snyk code test` scan #3: four findings, all at a CLI edge, all fixed by a guard rather than a suppression |
 | Dependency vulnerabilities | `make security` runs `snyk test` and `snyk code test`; dependencies pinned in a lock file; scans at hours 1, 5 and 7, not once at the end |
 
 **Smallest dependency tree we can defend.** Moving Cognee to a managed tenant

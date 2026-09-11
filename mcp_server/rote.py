@@ -25,7 +25,9 @@ returning a partial result as if it were a replay.
 Security note for the scan: every call here builds an **argument list**.
 ``record_step`` takes ``argv``, never a command string, and nothing is passed
 through a shell — which is what removes the injection finding that a shell-out
-tool surface would otherwise be (DESIGN §4).
+tool surface would otherwise be (DESIGN §4). For the same reason a workspace
+name is one path component under ``ROTE_HOME`` and never a path: ``_run``
+creates the directory it is handed.
 """
 
 from __future__ import annotations
@@ -52,12 +54,28 @@ class RoteError(RuntimeError):
     pass
 
 
+# A workspace is one directory inside ROTE_HOME. The name can reach us from an
+# MCP caller, and `_run` creates the directory it is handed, so `../..` or an
+# absolute path would put a mkdir anywhere on disk.
+WORKSPACE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
+
+
 def rote_home() -> Path:
-    return Path(os.environ.get("ROTE_HOME", str(Path.home() / ".rote")))
+    """Where the rote CLI keeps its state. ``ROTE_HOME`` is the CLI's own knob
+    (see scripts/rote-setup.sh) so it is honoured, but resolved once here so
+    every path below it is absolute and symlink-free."""
+    home = os.environ.get("ROTE_HOME") or str(Path.home() / ".rote")
+    return Path(home).expanduser().resolve()
 
 
 def workspace_dir(name: str = DEFAULT_WORKSPACE) -> Path:
-    return rote_home() / "workspaces" / name
+    if name in (".", "..") or not WORKSPACE_NAME.fullmatch(name or ""):
+        raise RoteError(f"{name!r} is not a workspace name")
+    root = rote_home() / "workspaces"
+    directory = (root / name).resolve()
+    if directory.parent != root:
+        raise RoteError(f"{name!r} does not resolve inside {root}")
+    return directory
 
 
 @dataclass

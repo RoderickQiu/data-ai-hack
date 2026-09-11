@@ -24,7 +24,7 @@ from agent.clock import DEFAULT_HORIZON, assign_release_days, release_histogram
 from agent.schema import Job, sanitize_html
 from insight.companies import coverage, profile
 from memory.extract import seniority_of
-from insight.hotdata import Hotdata
+from insight.hotdata import Hotdata, identifier
 from insight.store import Insight
 
 # canonical column -> the names a fetcher might have used, best first.
@@ -146,7 +146,10 @@ def project(source_table: str, insight: Insight | None = None,
     """Read their table, write ours. Idempotent: the schedule is deterministic."""
     insight = insight or Insight()
     client: Hotdata = insight.client
-    qualified = source_table if "." in source_table else client.qualified(source_table)
+    # ``source_table`` is named on the command line and has to be interpolated
+    # into the SQL below, so it goes through the identifier check in
+    # insight.hotdata rather than straight into a query.
+    qualified = client.qualified(source_table)
 
     sample = client.query(f"SELECT * FROM {qualified} LIMIT 1")
     if not sample:
@@ -156,7 +159,10 @@ def project(source_table: str, insight: Insight | None = None,
     if "id" not in mapping or "title" not in mapping:
         raise ValueError(f"{qualified} has no id/title column; found {sorted(sample[0])}")
 
-    columns = ", ".join(sorted(set(mapping.values())))
+    # The column names are the source table's own, and the source table is
+    # somebody else's half of the build; checked for the same reason.
+    columns = ", ".join(identifier(column, "column name")
+                        for column in sorted(set(mapping.values())))
     rows = client.query(f"SELECT {columns} FROM {qualified} LIMIT {int(limit)}")
     jobs = [job for job in (_job_from(row, mapping) for row in rows) if job]
     unscheduled = [job for job in jobs if job.release_day is None]

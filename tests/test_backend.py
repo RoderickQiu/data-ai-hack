@@ -18,6 +18,7 @@ from agent.predict import predict, requirement_coverage
 from agent.digest import parse_reply, tags_from_text
 from agent.rank import build_slate
 from agent.schema import Job, from_greenhouse, normalize_many, sanitize_html
+from insight.hotdata import HotdataError, identifier, qualify
 from insight.queries import _literal, bind_catalog
 from memory import claims as claims_mod
 from memory.answers import resolve, set_standard_answer
@@ -26,7 +27,8 @@ from memory.graph import Graph, GraphStore, LocalBackend, canonical_skill, nid
 from memory.prefs import FIELDS as PREFERENCE_FIELDS, Rule, induce, preference_fit
 from memory.sync import sync_graph
 from memory.writers import record_prediction, record_signal, upsert_job, upsert_requirements
-from mcp_server.rote import PlayIndex, fingerprint_ingest, fingerprint_task
+from mcp_server.rote import (PlayIndex, RoteError, fingerprint_ingest,
+                             fingerprint_task, workspace_dir)
 
 
 def make_store() -> GraphStore:
@@ -153,6 +155,42 @@ class QueryRendererTests(unittest.TestCase):
                 self.assertIn(rule_field, select,
                               f"{name} does not select {rule_field}, so a "
                               f"preference rule over it could never match")
+
+
+class OperatorInputTests(unittest.TestCase):
+    """The names and paths a human types on the command line.
+
+    ``--project``, ``--source-table`` and a workspace name all end up in a SQL
+    string or a mkdir, and none of them can be bound as a parameter. Each one is
+    checked at the edge instead, so the failure is an error message rather than
+    a rewritten query or a directory outside ROTE_HOME.
+    """
+
+    def test_bare_table_is_qualified(self):
+        self.assertEqual(qualify("tech_jobs_20260911", "jobs"),
+                         "jobs.public.tech_jobs_20260911")
+
+    def test_already_qualified_name_passes_through(self):
+        self.assertEqual(qualify("jobs.public.t", "jobs"), "jobs.public.t")
+
+    def test_a_name_carrying_sql_is_rejected(self):
+        for bad in ("jobs; DROP TABLE jobs --", "jobs WHERE 1=1", "j'obs",
+                    "jobs.public", "a.b.c.d", "1abc", ""):
+            with self.assertRaises(HotdataError, msg=bad):
+                qualify(bad, "jobs")
+
+    def test_column_names_are_checked_too(self):
+        self.assertEqual(identifier("salary_max"), "salary_max")
+        with self.assertRaises(HotdataError):
+            identifier("salary_max, (SELECT 1)")
+
+    def test_workspace_stays_under_rote_home(self):
+        directory = workspace_dir("data-ai-hack")
+        self.assertEqual(directory.name, "data-ai-hack")
+        self.assertEqual(directory.parent.name, "workspaces")
+        for bad in ("../../etc", "/etc", "a/b", "..", ""):
+            with self.assertRaises(RoteError, msg=bad):
+                workspace_dir(bad)
 
 
 class CompanyProfileTests(unittest.TestCase):

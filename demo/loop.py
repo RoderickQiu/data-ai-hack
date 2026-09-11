@@ -26,6 +26,7 @@ import argparse
 import json
 import random
 import time
+import urllib.parse
 import urllib.request
 from typing import Any, Mapping, Sequence
 
@@ -37,11 +38,27 @@ from insight.store import Insight
 from memory.graph import GraphStore
 
 
+def webhook_url(raw: str) -> str:
+    """Check a ``--webhook`` target before anything is sent to it.
+
+    The value arrives from the command line or ``ROCKETRIDE_WEBHOOK_URL``, and
+    the request carries ``ROCKETRIDE_APIKEY`` in a header — so the scheme has to
+    be pinned. urllib will happily open ``file://`` or ``ftp://`` from the same
+    call, which would turn a typo'd env var into a local file read with a
+    credential attached. http is allowed because the tunnel is sometimes plain
+    http in the room; anything else is a mistake, not a configuration.
+    """
+    parsed = urllib.parse.urlsplit((raw or "").strip())
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise ValueError(f"{raw!r} is not an http(s) webhook URL")
+    return parsed.geturl()
+
+
 def tick_webhook(url: str, payload: Mapping[str, Any], bearer: str = "",
                  timeout: float = 300.0) -> dict[str, Any]:
     """One real RocketRide run."""
     request = urllib.request.Request(
-        url, data=json.dumps(payload).encode(),
+        webhook_url(url), data=json.dumps(payload).encode(),
         headers={"Content-Type": "application/json",
                  **({"Authorization": f"Bearer {bearer}"} if bearer else {})},
     )
@@ -112,6 +129,13 @@ def main() -> None:
 
     if not args.local and not args.webhook:
         parser.error("no --webhook configured; pass one, or --local to use the harness")
+    if not args.local:
+        # Fail here rather than on tick 1: the loop swallows per-tick errors, so
+        # a bad URL would otherwise print the same failure every interval.
+        try:
+            args.webhook = webhook_url(args.webhook)
+        except ValueError as exc:
+            parser.error(str(exc))
 
     insight = store = clock = None
     if args.local:

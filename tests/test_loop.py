@@ -15,6 +15,7 @@ import unittest
 from typing import Any, Mapping, Sequence
 
 from agent.config import Settings, TUNABLES
+from demo.loop import webhook_url
 from agent.feedback import record_response
 from agent.metrics import RunMetrics
 from agent.rank import refresh_and_rank
@@ -125,6 +126,20 @@ def fresh_store() -> GraphStore:
     store_claims(store, CLAIMS)
     link_claim_skills(store)
     return store
+
+
+class WebhookTargetTests(unittest.TestCase):
+    """``--webhook`` is checked before a request carries the API key to it."""
+
+    def test_http_and_https_pass(self):
+        for url in ("https://api.rocketride.ai/v1/hook", "http://localhost:8080/x"):
+            self.assertEqual(webhook_url(url), url)
+
+    def test_any_other_scheme_is_refused(self):
+        for bad in ("file:///etc/passwd", "ftp://host/f", "gopher://h",
+                    "https:///no-host", "api.rocketride.ai/hook", ""):
+            with self.assertRaises(ValueError, msg=bad):
+                webhook_url(bad)
 
 
 class LoopTests(unittest.TestCase):

@@ -38,13 +38,39 @@ SOURCE_COLUMNS = [
 # roles this week" insight fire on noise; the schedule is ours, so the waves should be deliberate.
 WAVES = [("Perplexity", 9, 7), ("Ramp", 17, 6), ("Replit", 24, 6)]
 
+# A table name here is interpolated straight into the SQL below and also names a
+# directory under data/job_snapshots, so it is held to a plain identifier.
+IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def table_name(value, flag):
+    if not IDENTIFIER.fullmatch(value or ""):
+        raise SystemExit(f"{flag} {value!r} is not a table name")
+    return value
+
+
+def repo_path(value, *parents):
+    """Resolve a path argument and keep it inside the checkout.
+
+    `--cache` is operator input, but nothing it points at belongs outside the
+    repo; confining it means a stray `..` fails here rather than reading or
+    overwriting somewhere unexpected.
+    """
+    path = Path(value).expanduser()
+    path = (path if path.is_absolute() else ROOT.joinpath(*parents, path)).resolve()
+    if not path.is_relative_to(ROOT):
+        raise SystemExit(f"{value!r} resolves outside the repository ({path})")
+    return path
+
 
 def fetch(env, table, catalog):
     """Page by job_id: the query API truncates a page by response bytes, not by LIMIT."""
     headers = {"Authorization": "Bearer " + env["HOTDATA_API_KEY"], "X-Workspace-Id": env["HOTDATA_WORKSPACE_ID"]}
     rows, cursor = [], ""
     while True:
-        where = f"WHERE job_id > '{cursor}'" if cursor else ""
+        # job_id comes from an ATS board, so it is escaped rather than trusted:
+        # one apostrophe in a source id would otherwise rewrite this query.
+        where = f"""WHERE job_id > '{cursor.replace("'", "''")}'""" if cursor else ""
         body = {"database_id": env["HOTDATA_DATABASE_ID"],
                 "sql": f"SELECT {', '.join(SOURCE_COLUMNS)} FROM {catalog}.public.{table} {where} ORDER BY job_id LIMIT 60"}
         page = c.request("https://api.hotdata.dev/v1/query", body, headers).get("rows") or []
@@ -123,12 +149,14 @@ def main():
     args = parser.parse_args()
 
     env = c.load_env()
-    catalog = env.get("HOTDATA_CATALOG", "jobs")
-    cache = Path(args.cache) if args.cache else None
+    catalog = table_name(env.get("HOTDATA_CATALOG", "jobs"), "HOTDATA_CATALOG")
+    source_table = table_name(args.source_table, "--source-table")
+    table_name(args.table, "--table")
+    cache = repo_path(args.cache) if args.cache else None
     if cache and cache.exists():
         rows = json.loads(cache.read_text())
     else:
-        rows = fetch(env, args.source_table, catalog)
+        rows = fetch(env, source_table, catalog)
         if cache:
             cache.write_text(json.dumps(rows))
 
