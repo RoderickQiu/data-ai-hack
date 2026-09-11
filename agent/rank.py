@@ -184,14 +184,31 @@ def build_slate(ranked: Sequence[Prediction], tunables=TUNABLES) -> list[Predict
     tail = list(ranked[max(size - off, 0):])
     if not tail:
         return list(ranked[:size])
+    # Not from roles a confirmed rule already condemns. The tail is where those
+    # sink, and the better the ranking learns, the more reliably it sinks them —
+    # so drawing blind from the tail meant every slate carried four roles the
+    # agent knew the human would reject, and learning made that worse rather
+    # than better. Measured over days 19-20: all eight harder picks skipped,
+    # half of them matching a rule already confirmed.
+    #
+    # A harder call should be one the ranking is *unsure* of, not one it is
+    # confident about in the wrong direction. Roles with no penalty against them
+    # are preferred; the condemned ones are kept only as a fallback so a slate
+    # is never short.
+    condemned = [p for p in tail if any(str(r).startswith("you avoid") for r in p.reasons)]
+    uncertain = [p for p in tail if p not in condemned]
+    pool = uncertain or condemned
+
     picks = []
     for slot in range(off):
-        if not tail:
+        if not pool:
+            pool = condemned if pool is uncertain else []
+        if not pool:
             break
         seed = int(hashlib.sha256(
             f"{slot}|{'|'.join(p.job_id for p in top)}".encode()
         ).hexdigest()[:8], 16)
-        picks.append(tail.pop(seed % len(tail)))
+        picks.append(pool.pop(seed % len(pool)))
     for pick in picks:
         pick.reasons.append("shown as a harder call, to keep the slate honest")
     return top + picks

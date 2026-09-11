@@ -67,7 +67,12 @@ class Tunables:
     # hold slate difficulty fixed so prediction_accuracy cannot drift up just
     # because the slate got uniformly good (DESIGN §7).
     slate_size: int = 10
-    slate_off_ranking: int = 4
+    # Down from 4. Those slots existed to keep skips occurring so the
+    # skip-class accuracy meant something; with precision as the headline —
+    # how much of what it showed you was worth showing — four deliberately
+    # rejectable roles in every ten capped it near 60% by construction. Two
+    # still keeps both classes present for accuracy without owning the slate.
+    slate_off_ranking: int = 2
     narrow_top_k: int = 30
 
     # Preference induction (DESIGN §6.3).
