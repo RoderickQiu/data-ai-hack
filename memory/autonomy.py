@@ -135,7 +135,19 @@ def evaluate(store: GraphStore, domain: str) -> Readiness:
         reason = f"{confirmed} of the last {window} preference guesses confirmed"
 
     state = current["state"]
-    ready = bool(enough and value >= threshold and state == "Supervised")
+    # "Ready" as well as "Supervised": a domain that has asked and not been
+    # answered has to be able to ask again — DESIGN §8 says it "posts one prompt
+    # and keeps asking until answered". Gating on Supervised alone meant the
+    # first evaluate that qualified flipped the state to Ready, and every call
+    # after that returned ready=False, so the prompt could fire exactly once in
+    # the domain's life. Ours fired into an unattended loop tick on day 3 and
+    # could never be offered again.
+    #
+    # Nagging is still held off elsewhere, and deliberately: decline() sets the
+    # state back to Supervised *and* decisions_since_prompt negative, so "Not
+    # yet" is silenced by the counter below rather than by the state. Autonomous
+    # is absent, so a granted domain never asks again.
+    ready = bool(enough and value >= threshold and state in ("Supervised", "Ready"))
     if ready and current["decisions_since_prompt"] < 0:
         ready = False
     if ready:
