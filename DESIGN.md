@@ -47,7 +47,49 @@ solve that honestly.
 | Insight | hotdata.dev | `jobs`, `applications`, `runs` tables over a ~1000 row corpus. SQL for new-since-last-run, salary percentiles, hiring waves, reply rate by source. Vector and BM25 index on job descriptions. |
 | Motion | RocketRide | The agent loop. Wave-planning agent with Cognee, HydraDB, and our MCP tools plus Slack and Sheets (Docs, Calendar, Gmail if time). |
 | Muscle memory | Modiqo Rote | Plays for `apply-pack`, `refresh-and-rank`, `ingest-ats`. Replayed instead of re-reasoned. Each run logged back into Cognee as a `SkillRunEntry`. |
-| Security | Snyk | Whitelists and allowlists as design decisions, plus `snyk test` and `snyk code test` in a Makefile target before every commit. |
+| Security gate | Snyk | Whitelists and allowlists as design decisions, plus `snyk test` and `snyk code test` in a Makefile target before every commit. |
+
+Snyk is deliberately the odd row. The spec's only stated mechanism for it is
+subtractive — "security vulnerabilities found will reduce points from the final
+score" — and it is absent from the five-column table that every suggested
+project is mapped against. It is a gate, not a layer, so it gets gate-shaped
+effort: scan early, keep the tree small, do not architect around it. The five
+rows above it are the ones that must be load-bearing.
+
+### The loop, and why no layer is decorative
+
+Each layer's output is the next layer's input, and the cycle closes on itself.
+That is the whole claim, and it is what "all five load-bearing" has to mean in
+practice:
+
+```
+hotdata     what is new today, and how this role prices against 1000 live postings
+   |
+HydraDB     how it relates to me: skill overlap, warm paths, who replies, what I rejected
+   |
+Cognee      what I have said I want, recalled as preference context
+   |
+predict     keep or skip per role, with a reason drawn from all three
+   |
+RocketRide  acts: ranked digest to Slack, tracker row to Sheets, apply-pack on request
+   |
+human       keeps, skips, reports a reply
+   |
+   +--> Cognee (feedback entry) + HydraDB (outcome edge) + hotdata (applications row)
+        and the next run ranks better
+```
+
+Rote sits across every step rather than inside one. Before any task `find_play`
+asks Rote's registry and Cognee's skill memory; a hit replays, a miss reasons
+and crystallizes. The run is written back to Cognee as a `SkillRunEntry`, so
+Rote's output becomes Cognee's memory and routes the *next* `find_play`. That
+edge is what makes the system compound rather than merely persist.
+
+Read as repeated work across the 8 hours: hotdata is queried every run against a
+clock that moves every run; HydraDB is read every run and written on every human
+response; Cognee is recalled every run and written on every feedback and every
+skill run; RocketRide executes every run; Rote either replays or records on
+every step of every run. None of them is a day-0 import.
 
 ### Cognee Cloud (managed tenant, wired in this repo)
 
@@ -111,6 +153,16 @@ below are Cypher. Rewriting them against `graph.relations` and `graph.subgraph`
 at hour 2 is not a trade we should be willing to make. Docker also unlocks the
 cleanest bridge story, below.
 
+**Whichever surface we get, the queries run through our MCP server, not through
+a RocketRide node.** Two findings from the node catalog decide this. `db_hydradb`
+describes its own retrieval as "HydraDB's native server-side search — no
+embeddings or query language required": there is no Cypher on that node whatever
+the cloud key supports. And `graph_neo4j`, which would reach an OSS instance over
+Bolt, "accepts natural-language questions, translates them to Cypher queries via
+an LLM" and requires an `llm` invoke connection — one LLM call per graph query
+per run, a token cost that can never compound down, and six carefully written
+multi-hop queries reduced to per-run guesses on stage.
+
 Bridge from Cognee — one option now, which is a simplification, not a loss:
 
 `GET /api/v1/datasets/{id}/graph?full=true` returns the whole graph as
@@ -125,6 +177,18 @@ Cut the spike from the schedule. The JSON sync was the pre-written fallback
 anyway, and the graph endpoint is a better version of it — no export call, no
 intermediate file, and a `query` + `neighborhood_depth` mode if we ever want to
 sync a subgraph instead of the lot.
+
+**What stops HydraDB being a mirror of Cognee.** The sync copies typed entities
+across, so a judge can fairly ask what the second graph is *for*. The answer is a
+clean split of provenance: **Cognee holds what was said, HydraDB holds what
+happened.** Cognee extracts `Candidate`, `Skill`, `Job`, `Company` and
+`Requirement` from unstructured text — resume, preference paragraphs, job
+descriptions, feedback prose. HydraDB holds those *plus* the edges the agent
+writes directly from its own actions, which no text extraction can produce:
+`APPLIED_TO` stamped with `virtual_day`, `GOT_REPLY`, `REJECTED` with a reason,
+`PREDICTED_KEEP` and what the human actually answered. Every query below
+traverses both halves — skills from the extraction, outcomes from the action log
+— which is precisely why neither layer can answer them alone.
 
 We stay **single-candidate**. Graph depth comes from routing through companies,
 skills, and outcomes rather than from a second person:
@@ -204,21 +268,55 @@ Findings from the local `.rocketride/` catalog:
 - Native tool nodes we want: `tool_cognee` (point `base_url` at our tenant
   and `api_key` at `COGNEE_API_KEY`; it sends `X-Api-Key` like we do),
   `db_hydradb` (cloud memory API), `tool_http_request` (URL whitelisted),
-  `tool_python` (sandboxed), `tool_slack`, `tool_sheets`, `mcp_client` (stdio or
-  streamable HTTP). `tool_docs`, `tool_calendar`, `tool_gmail` are additive only.
+  `tool_python` (sandboxed), `tool_slack`, `tool_sheets`, `mcp_client`
+  (streamable HTTP; stdio is not available to us, see below). `tool_docs`,
+  `tool_calendar`, `tool_gmail` are additive only.
 - Sources: `chat` gives a UI for the demo, `webhook` for scripted and timed runs.
 
-Architecture decision: write one small MCP server (Python, FastMCP) that
-exposes our own tools: `hotdata_sql`, `hotdata_search`, `hydra_cypher`,
-`find_play`, `run_play`, `record_step`, `predict_fit`, `log_run_metrics`.
-RocketRide's `mcp_client` node connects to it. Benefits: all glue code is local
-and testable without RocketRide, the same tools can be driven from Claude Code
-while debugging, and the RocketRide pipeline stays a thin JSON file.
+Architecture decision: write one small MCP server (Python, FastMCP) exposing
+`hotdata_query`, `hotdata_search`, `hydra_query`, `find_play`, `run_play`,
+`record_step`, `predict_fit`, `log_run_metrics`. RocketRide's `mcp_client`
+connects to it.
 
-If RocketRide runs in the cloud (staging), the MCP server must be reachable over
-streamable HTTP through a tunnel (`cloudflared tunnel` or ngrok). If we run the
-engine locally via Docker on port 5565, stdio works. Prefer local for
-development, switch to staging for the final demo only if it is stable.
+**This is not a sixth integration; it is the only bridge to two of the five.**
+The 140-node catalog has no hotdata node and no Rote node — neither layer can be
+reached from RocketRide at all without it. Cognee and Slack/Sheets have good
+native nodes and stay native; we do not wrap them. The server is ~200 lines and
+has three consumers — the RocketRide pipeline, the hour-3 loop driver, and the
+debugging harness in §8 — so the glue gets written once instead of three times.
+
+Two rules on the tool surface, both settled before hour 1 because neither can be
+retrofitted once the loop is producing chart rows:
+
+- **Named queries, never query text.** `hydra_query(name, params)` over the six
+  Cypher queries above and `hotdata_query(name, params)` over the fixed SQL, not
+  `hydra_cypher(text)`. Three reasons that all point the same way: the agent
+  stops spending reasoning tokens composing queries on every run, which is line
+  1 of the chart; a named query is trivially a Rote play; and `snyk code test`
+  never gets an LLM-driven injection surface to flag.
+- **Return ids and one-line summaries, never payloads.** Tokens per run are
+  dominated by what tools hand *back* into context, not by planning. A query
+  that returns 200 job descriptions swamps every saving Rote produces, and
+  Cognee `recall` returns *more* as the graph grows — left uncapped, the memory
+  layer would make the cost line rise over the day. Full text only on an
+  explicit single-job fetch, and a hard cap on recall payload.
+
+**Transport is decided: staging only.** The coupon credits live there, so the
+engine is not ours to run locally and stdio is off the table. Consequences, all
+of which land at hour 0 rather than hour 4:
+
+- The MCP server is reached over **streamable HTTP through a tunnel**
+  (`cloudflared tunnel`). It goes up with the first pipeline, not with the first
+  rehearsal: what we practise on has to be what we demo on.
+- A quick tunnel's URL changes on every restart. Use a named tunnel, or keep the
+  URL in `.env` and have the pipeline read it from there, or spend the last hour
+  re-pasting URLs into node configs.
+- `mcp_client` takes a `bearer` token. The tunnel is a public URL fronting SQL,
+  Cypher and a Rote shell-out; it does not go out unauthenticated.
+- The `webhook` source is public, which is what makes the hour-3 timed loop
+  honest: `cron` or a `while` loop `curl`s the webhook, so every point on the
+  chart is a real RocketRide run rather than a local script we later describe as
+  one.
 
 **Motion scope is pre-committed, not deferred.** Four Google integrations is
 where 8-hour builds die: OAuth consent per node can eat 90 minutes on its own.
@@ -276,6 +374,14 @@ State both:
   reaction to a finding; both are in the pipeline from the first commit.
 - The agent never holds job-board credentials because every source is keyless.
 - No auto-submission means no destructive outward action exists to be exploited.
+- **The MCP server is what `snyk code test` will flag**, not the dependencies. A
+  tool surface taking raw SQL, raw Cypher and a shell-out to the `rote` CLI is
+  three injection findings waiting to happen, in code we have not written yet.
+  The named-query rule above removes two by construction; `record_step` takes an
+  argument list, never a command string.
+- The clean 12-dependency tree was verified *before* FastMCP, the neo4j driver,
+  the hotdata SDK and pyarrow land at hour 0. Re-run the scan once dependencies
+  settle, not only at hour 1.
 - `make security` runs `snyk test` and `snyk code test`. Dependencies pinned in
   a lock file, `.env` out of git (already done).
 - **Smallest dependency tree we can defend.** Moving Cognee to a managed tenant
@@ -349,14 +455,34 @@ jobs_new, shown, predicted_keep, actual_keep, precision_at_5, prediction_accurac
 
 **Line 2, quality rising.** Before showing the digest, the agent **predicts**
 for each candidate job whether the user will keep it or skip it. The prediction
-runs off Cognee `recall` of stated preferences plus the HydraDB rejection-reason
-and company-outcome queries. Both the prediction and the user's actual response
-are logged to `applications`.
+runs off Cognee `recall` of stated preferences, the HydraDB rejection-reason and
+company-outcome queries, and hotdata's salary percentile for the title — so all
+three memory layers are load-bearing in the quality line, not only in the
+display. Both the prediction and the user's actual response are logged to
+`applications`.
+
+**`predict_fit` is a deterministic scorer, not an LLM call.** This is the
+decision that stops the two lines fighting each other. An LLM prediction would
+take a `recall` context that grows with the graph, so tokens per run would
+*rise* exactly as memory improved. A weighted score over graph and aggregate
+features holds the model fixed and lets the inputs get richer, which is also the
+stronger claim: the agent did not get a better brain, it got a better memory.
 
 Two metrics fall out:
 
 - `precision_at_5`: of the five roles shown, how many the user did not reject.
-- `prediction_accuracy`: how often the agent's guess matched the human.
+- `prediction_accuracy`: how often the agent's guess matched the human,
+  **reported on the skip class**. Measured across all five shown roles the
+  number is dishonest: as ranking improves the slate becomes uniformly good, the
+  user keeps nearly everything, and "keep" turns trivially predictable —
+  accuracy rises because the base rate moved, not because judgment sharpened.
+  Two roles of every five are therefore drawn from *outside* the top ranking to
+  hold slate difficulty fixed, and the headline number is how often the agent
+  called a skip correctly. Settle this at hour 1; retrofitting it at hour 6
+  means re-running the whole loop.
+
+These are not two independent proofs — on an all-top-5 slate they measure nearly
+the same thing, which is the other reason the slate is mixed.
 
 "Run 1 it guessed your taste 40% of the time. Run 20, 90%." That is memory
 becoming judgment, it needs almost no typing from the human during the demo, and
@@ -421,9 +547,54 @@ Pre-event setup:
   datasource and loads 200 rows into `jobs.public.jobs`. Still open: the
   canonical `jobs` schema with `virtual_day`, and the `applications` and `runs`
   tables.
-- RocketRide: staging key works against `/services`. Still open: the credit
-  balance (dashboard-only), running the hello pipeline, and confirming
-  `mcp_client` reaches a local FastMCP server. The pipeline JSON shape is not in
+- ~~An API key for the agent's model.~~ **Done: Qwen `qwen3.7-plus` on an
+  Alibaba Cloud MaaS workspace endpoint, in `.env`.** RocketRide does not front
+  a model — every `llm_*` node requires its own `apikey`, and
+  `agent_rocketride.invoke.llm` is `min 1, max 1`, so without a key there is no
+  agent and no pipeline. The "no model configuration at all" claim is true of
+  Cognee and false of RocketRide. Cognee cannot cover for it either: its tenant
+  exposes 70 routes and the only LLM-ish ones are `/llm/custom-prompt` (a
+  cognify helper that generates an extraction prompt from a `graphModel`) and
+  `/llm/infer-schema`. There is no chat or completions surface.
+  Verified live on 2026-09-11:
+    - The node is **`llm_openai_api`, profile `custom`** — not `llm_qwen`, which
+      expects a regional DashScope host and whose keys are not interchangeable
+      between regions. Ours is a workspace host with a `/compatible-mode/v1`
+      base URL.
+    - Multi-turn tool calling works: on turn 1 it selected the right tool with
+      the right enum value and params; on turn 2, fed a tool result, it chained
+      to the next tool carrying an id out of the first result. That was the real
+      risk in swapping models and it is cleared.
+    - `qwen3.7-plus` is a reasoning model, ~60-120 reasoning tokens per call,
+      which is variance on the exact metric the demo rests on. It can be turned
+      off: `enable_thinking: false` (flat in the body — DashScope wants it
+      un-nested, unlike self-hosted vLLM which wants
+      `chat_template_kwargs`) drops reasoning to zero with tool calling intact,
+      verified at 673 -> 603 tokens on the same prompt.
+      Getting it *through* RocketRide is a five-minute test rather than a known
+      quantity: the node's form schema exposes only `apikey`, `base_url`,
+      `model` and `modelTotalTokens`, but a pipeline component's `config` is
+      typed `Record<string, unknown>`, so an extra `enable_thinking` key may
+      pass straight through. `POST /task` reports bad fields one at a time, so
+      trying it costs nothing once a pipeline exists.
+    - If it does not pass through, fallbacks in order. RocketRide models
+      thinking as separate *profiles* elsewhere (`kimi-k2-thinking`,
+      `qwen-plus-2025-07-28-thinking`), but our endpoint has no `-instruct`
+      sibling for `qwen3.7-plus`; a true non-thinking model on the same key is
+      `qwen3-235b-a22b-instruct-2507`. Worst case, keep the reasoning tokens and
+      say on the slide that the line includes them.
+    - `modelTotalTokens` is required by the node and is the context window.
+      Take the real number from the Aliyun console.
+- **`agent_rocketride` also requires exactly one `memory` connection**
+  (`invoke.memory` is `min 1, max 1`). The node list below names tools but never
+  a memory node. `memory_internal` is keyless and sufficient; `db_hydradb`
+  would double as memory and graph store, which is tidier but couples the two.
+- RocketRide: staging key works against `/services`. **Decided: staging only**,
+  since the coupon credits live there — so the tunnel is mandatory and goes up at
+  hour 0, not at rehearsal time. Still open, in priority order: does a task
+  response carry token usage (line 1 of the chart depends on it), does
+  `mcp_client` reach a tunnelled FastMCP server, what does one run cost against
+  the coupon, and the hello pipeline. The pipeline JSON shape is not in
   the OpenAPI spec: `POST /task` takes a freeform object and only tells you what
   is missing, one error at a time.
 
@@ -431,7 +602,7 @@ Event day, by hour:
 
 | Hour | Work | Done when |
 |---|---|---|
-| 0 to 1 | Canonical job schema with `virtual_day`. Fetch the ~1000 job corpus from 50 to 100 boards across all three ATS families. Load hotdata. Snyk scan running. | `hotdata query` returns 1000+ rows from three sources and a salary percentile that is not noise |
+| 0 to 1 | Canonical job schema with `virtual_day`. Fetch the ~1000 job corpus from 50 to 100 boards across all three ATS families. Load hotdata. Snyk scan running. **Tunnel up, one stub MCP tool callable from a staging pipeline, token usage confirmed in the task response.** | `hotdata query` returns 1000+ rows from three sources and a salary percentile that is not noise, and a staging pipeline has called one of our tools through the tunnel |
 | 1 to 3 | Cognee custom graph model, resume and prefs ingest, HydraDB sync, the six Cypher queries, hotdata queries, `predict_fit`, MCP server | Every tool callable from a Python REPL; a prediction comes back with a reason |
 | 3 to 4.5 | RocketRide pipeline: agent, LLM, MCP client, Slack, Sheets. First full run end to end. **Start the timed loop.** | Cold run works and the loop is ticking one virtual day per interval |
 | 4.5 to 6 | Rote: record and crystallize `apply-pack` then `refresh-and-rank` then `ingest-ats`. `find_play` and replay path. `SkillRunEntry`. Metrics into `runs`. | Later runs replay with visibly lower token counts while the loop keeps running |
@@ -457,6 +628,19 @@ pitch from hour 5.
   corpus will not come close, but the tenant is a single point of failure that a
   local library was not. Mitigation is the HydraDB copy: once the sync has run,
   every demo query except fresh ingestion reads from HydraDB anyway.
+- **RocketRide credits run out mid-afternoon:** the coupon grants 5,000 org
+  tokens and organizers top up on request, so this is a logistics item rather
+  than a design constraint — ask at the first sign, not at hour 6 with a live
+  run pending. Note also that the balance is dashboard-only: there is no usage
+  route anywhere in the OpenAPI, so nothing can watch it for us.
+- **RocketRide does not return token usage:** then line 1 has no data source.
+  Cognee's `sessions/cost-by-model` measures tenant LLM spend, not the agent's,
+  and is not a substitute. Since inference runs on our own key we are at least
+  not wholly dependent on RocketRide reporting it, though per-run attribution
+  from the provider side is awkward. Check it in the first ten minutes,
+  alongside the Cypher question. If the answer is no, count at the MCP boundary
+  (tool calls and returned bytes) and say openly on the slide that the cost line
+  is a proxy.
 - **RocketRide agent to tool wiring is undocumented:** fall back to
   `agent_langchain` with the same `mcp_client`. Keep a local Python driver of the
   same MCP tools as a debugging harness, never as the demo path, since judges

@@ -2,7 +2,7 @@
 
 Knowledge-graph memory over our data using [Cognee Cloud](https://docs.cognee.ai/) —
 one managed tenant shared by the whole team, reached over REST. Nothing about the
-memory layer runs on your laptop, so there is no model to configure and no local
+memory layer runs on your laptop, so there is no embedding stack to configure and no local
 graph to drift out of sync with everyone else's.
 
 The full stack, in one line:
@@ -17,7 +17,8 @@ Nothing here is shared through git. Keys, logins and CLI installs live on your o
 machine, so each of us has to complete every step below. Tick them off in order.
 
 1. **Clone and install.** Follow [Setup](#setup) through `cp .env.example .env`.
-   Two small packages, any Python 3.10+, no gcloud and no LLM keys of your own.
+   Two small packages, any Python 3.10+, no gcloud. Cognee needs no model key,
+   but RocketRide's agent does — see `ANTHROPIC_API_KEY` in `.env.example`.
 2. **Join the Cognee Cloud tenant** and copy `COGNEE_BASE_URL` and
    `COGNEE_API_KEY` out of the dashboard's "Connect your agent" panel into `.env`.
    The tenant already holds the team's graph; you are connecting to it, not
