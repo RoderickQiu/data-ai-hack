@@ -8,6 +8,11 @@ from .schemas import PackIn
 from .signals import Signal, SignalSink
 
 PACKS: dict[str, PackIn] = {}
+# (run_id, job_id) already answered. Slack leaves a button live until the
+# message update lands, so a second tap on the same role was recorded a second
+# time: day 16 logged 11 responses across 9 roles. A decision is a fact about a
+# role, not a count of taps.
+ANSWERED: set[tuple[str, str]] = set()
 # run_id -> {job_id: predicted}. A prediction that is never resolved against the
 # human's actual answer is not evidence of anything, so the digest stashes what
 # it guessed and every click closes the loop on it.
@@ -31,6 +36,11 @@ def _replace_actions(client, body: dict[str, Any], block_id: str, replacement: d
 
 def register(app: App, sink: SignalSink) -> None:
     def record(kind: str, v: dict[str, Any], user: str, **extra) -> None:
+        key = (str(v.get("r") or ""), str(v.get("j") or ""))
+        if kind in ("keep", "skip", "not_for_me") and key in ANSWERED:
+            print(f"[slack] ignoring repeat {kind} on {key[1]}")
+            return
+        ANSWERED.add(key)
         sink.emit(
             Signal(
                 kind=kind,

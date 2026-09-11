@@ -391,13 +391,48 @@ def rejected_rule_keys(store: GraphStore) -> list[str]:
 
 
 def active_rules(store: GraphStore) -> list[Rule]:
-    rules = []
+    """The confirmed rules, with redundant ones folded together.
+
+    preference_fit subtracts each rule's full weight, and that is deliberate:
+    distinct preferences should compound, so a role that is too senior *and* at
+    too large a company is penalised twice over.
+
+    What must not compound is the same preference confirmed more than once. The
+    seniority inducer keys a rule on the set of levels rejected, so successive
+    rejections proposed {manager, staff}, then {principal, staff}, then
+    {manager, principal, staff} — three different rule keys, each of which the
+    human reasonably confirmed because each looked new. A staff role then
+    matched all three and lost 1.8 against a 0.5 starting score.
+
+    Rules sharing a field, operator and effect collapse into one carrying the
+    union of their values: strictly the broadest thing the human agreed to, and
+    charged once.
+    """
+    rules: list[Rule] = []
     for row in store.run("active_preferences"):
         try:
             rules.append(Rule.parse(row["rule"]))
         except (KeyError, ValueError, TypeError):
             continue
-    return rules
+
+    merged: dict[tuple[str, str, str], Rule] = {}
+    for rule in rules:
+        key = (rule.field, rule.op, rule.effect)
+        seen = merged.get(key)
+        if seen is None:
+            merged[key] = rule
+        elif rule.op in ("in", "not_in"):
+            values = sorted({*_as_list(seen.value), *_as_list(rule.value)})
+            merged[key] = Rule(rule.field, rule.op, values, rule.effect,
+                               max(seen.weight, rule.weight))
+        # Any other operator: the first confirmation stands. Two thresholds on
+        # one field are a contradiction to resolve with the human, not by
+        # quietly averaging them.
+    return list(merged.values())
+
+
+def _as_list(value: Any) -> list[Any]:
+    return list(value) if isinstance(value, (list, tuple)) else [value]
 
 
 def check_for_hypothesis(store: GraphStore) -> list[Preference]:
