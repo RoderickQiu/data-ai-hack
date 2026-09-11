@@ -1,26 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Muscle Memory</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<title>the right job</title>
+
 <style>
   :root {
     color-scheme: light;
-    --plane:        #f9f9f7;
-    --surface:      #fcfcfb;
-    --ink:          #0b0b0b;
-    --ink-2:        #52514e;
-    --ink-muted:    #898781;
-    --grid:         #e1e0d9;
-    --axis:         #c3c2b7;
+    --accent: #0e7490;
+    --plane:        #effbfc;
+    --surface:      #ffffff;
+    --ink:          #083344;
+    --ink-2:        #365b66;
+    --ink-muted:    #607e87;
+    --grid:         #cfe9ed;
+    --axis:         #a1c7ce;
     --rule:         rgba(11,11,11,0.10);
     --raise:        rgba(11,11,11,0.04);
 
-    --first:        #eb6834;
-    --partial:      #2a78d6;
-    --full:         #1baf7a;
+    --first:        #64748b;
+    --partial:      #0891b2;
+    --full:         #06b6d4;
 
-    --good:         #0ca30c;
-    --good-ink:     #006300;
+    --good:         #0891b2;
+    --good-ink:     #0e7490;
     --warning:      #fab219;
     --critical:     #d03b3b;
 
@@ -30,36 +34,38 @@
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       color-scheme: dark;
-      --plane:     #0d0d0d;
-      --surface:   #1a1a19;
+      --accent: #67e8f9;
+      --plane:     #06232c;
+      --surface:   #0b303c;
       --ink:       #ffffff;
-      --ink-2:     #c3c2b7;
-      --ink-muted: #898781;
-      --grid:      #2c2c2a;
-      --axis:      #383835;
+      --ink-2:     #a1c7ce;
+      --ink-muted: #607e87;
+      --grid:      #1d4652;
+      --axis:      #315d68;
       --rule:      rgba(255,255,255,0.10);
       --raise:     rgba(255,255,255,0.04);
-      --first:     #d95926;
-      --partial:   #3987e5;
-      --full:      #199e70;
-      --good-ink:  #0ca30c;
+      --first:     #94a3b8;
+      --partial:   #22d3ee;
+      --full:      #67e8f9;
+      --good-ink:  #0891b2;
     }
   }
   :root[data-theme="dark"] {
     color-scheme: dark;
-    --plane:     #0d0d0d;
-    --surface:   #1a1a19;
+      --accent: #67e8f9;
+    --plane:     #06232c;
+    --surface:   #0b303c;
     --ink:       #ffffff;
-    --ink-2:     #c3c2b7;
-    --ink-muted: #898781;
-    --grid:      #2c2c2a;
-    --axis:      #383835;
+    --ink-2:     #a1c7ce;
+    --ink-muted: #607e87;
+    --grid:      #1d4652;
+    --axis:      #315d68;
     --rule:      rgba(255,255,255,0.10);
     --raise:     rgba(255,255,255,0.04);
-    --first:     #d95926;
-    --partial:   #3987e5;
-    --full:      #199e70;
-    --good-ink:  #0ca30c;
+    --first:     #94a3b8;
+    --partial:   #22d3ee;
+    --full:      #67e8f9;
+    --good-ink:  #0891b2;
   }
 
   * { box-sizing: border-box; }
@@ -130,7 +136,7 @@
   .panel-head p { margin: 0; font-size: 13px; color: var(--ink-2); }
 
   .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-left: auto; }
-  .legend span { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+  .legend span { max-width: 100%; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
   .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex: none; }
 
   .charts { padding: 0 18px 6px; position: relative; }
@@ -209,38 +215,44 @@
     .wrap { padding-inline: 16px; }
     .stats { grid-template-columns: 1fr; }
     .masthead-meta { margin-left: 0; }
+    .legend { margin-left: 0; min-width: 0; }
+    .legend span { white-space: normal; }
+    .panel, .cols > * { min-width: 0; }
   }
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; }
   }
+  .masthead h1 { color: var(--accent); font-size: clamp(32px, 5vw, 48px); font-weight: 700; }
+  .panel { box-shadow: 0 4px 20px var(--raise); }
+  .stats { border-top: 3px solid var(--accent); }
 </style>
+</head>
+<body>
 
 <!-- Static text, replaced wholesale by createRoot().render(). It costs nothing,
      and it is what a link preview, a reader-mode pass, or a browser that could
      not reach the CDN shows instead of a blank white page. -->
 <div id="root">
   <div class="wrap">
-    <div class="eyebrow">Muscle Memory</div>
+    <div class="eyebrow">the right job</div>
     <p class="sub">An assistant that hunts for jobs on your behalf. The longer it runs,
     the cheaper it gets, the less it has to ask you, and the better it gets at knowing
     which jobs you actually want. Loading the live figures…</p>
   </div>
 </div>
 
-<!-- cdnjs rather than unpkg: unpkg resolves through a redirect chain that some
-     networks drop, and a failed script tag here is a blank page rather than a
-     degraded one. Each URL verified 200 at the pinned version. `onerror` records
-     which one failed so the message below can name it instead of guessing. -->
+<!-- Pinned local dependencies keep the dashboard available without a CDN. -->
 <script>window.__missing = [];</script>
-<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"
-        onerror="window.__missing.push('react')"></script>
-<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"
-        onerror="window.__missing.push('react-dom')"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.25.6/babel.min.js"
-        onerror="window.__missing.push('babel-standalone')"></script>
-
-<script type="text/babel" data-presets="react">
-const { useState, useEffect, useRef, useLayoutEffect, Fragment } = React;
+<script src="vendor/react.production.min.js" onerror="window.__missing.push('react')"></script>
+<script src="vendor/react-dom.production.min.js" onerror="window.__missing.push('react-dom')"></script>
+<script>
+const {
+  useState,
+  useEffect,
+  useRef,
+  useLayoutEffect,
+  Fragment
+} = React;
 
 /* ---------------------------------------------------------------------------
    This page reads one document — dashboard/data.json, built by demo/dashboard.py
@@ -258,80 +270,313 @@ const SAMPLE = {
   live: false,
   day: 20,
   cost_basis: 'tokens',
-  runs: [
-    { day:1,  mode:'first_run',      tokens:14820, wall:21.4, questions:6, shown:5, kept:2, acc:0.40, touches:14 },
-    { day:2,  mode:'first_run',      tokens:12140, wall:18.9, questions:5, shown:5, kept:2, acc:0.44, touches:12 },
-    { day:3,  mode:'partial_replay', tokens:9380,  wall:14.2, questions:4, shown:5, kept:3, acc:0.48, touches:11 },
-    { day:4,  mode:'partial_replay', tokens:6820,  wall:11.6, questions:4, shown:5, kept:3, acc:0.52, touches:10 },
-    { day:5,  mode:'partial_replay', tokens:5210,  wall:9.4,  questions:3, shown:5, kept:3, acc:0.55, touches:9 },
-    { day:6,  mode:'full_replay',    tokens:4080,  wall:7.1,  questions:2, shown:5, kept:3, acc:0.58, touches:8 },
-    { day:7,  mode:'full_replay',    tokens:3560,  wall:6.3,  questions:2, shown:5, kept:3, acc:0.63, touches:8 },
-    { day:8,  mode:'full_replay',    tokens:3120,  wall:5.6,  questions:1, shown:5, kept:4, acc:0.66, touches:7 },
-    { day:9,  mode:'full_replay',    tokens:2880,  wall:5.2,  questions:1, shown:5, kept:3, acc:0.68, touches:7 },
-    { day:10, mode:'full_replay',    tokens:2610,  wall:4.8,  questions:1, shown:5, kept:4, acc:0.72, touches:7 },
-    { day:11, mode:'full_replay',    tokens:2400,  wall:4.4,  questions:0, shown:5, kept:4, acc:0.74, touches:6 },
-    { day:12, mode:'partial_replay', tokens:3390,  wall:6.0,  questions:1, shown:5, kept:4, acc:0.73, touches:7,
-      note:'It met a task shape it had never seen, so it had to work that one out. The rest came from memory.' },
-    { day:13, mode:'full_replay',    tokens:2180,  wall:4.1,  questions:0, shown:5, kept:4, acc:0.78, touches:6 },
-    { day:14, mode:'full_replay',    tokens:2020,  wall:3.9,  questions:0, shown:5, kept:4, acc:0.80, touches:6 },
-    { day:15, mode:'full_replay',    tokens:1940,  wall:3.7,  questions:0, shown:5, kept:4, acc:0.82, touches:6 },
-    { day:16, mode:'full_replay',    tokens:1860,  wall:3.5,  questions:0, shown:5, kept:4, acc:0.84, touches:6 },
-    { day:17, mode:'full_replay',    tokens:1790,  wall:3.4,  questions:0, shown:5, kept:5, acc:0.85, touches:5 },
-    { day:18, mode:'full_replay',    tokens:1710,  wall:3.3,  questions:0, shown:5, kept:4, acc:0.86, touches:6 },
-    { day:19, mode:'full_replay',    tokens:1240,  wall:3.1,  questions:0, shown:5, kept:5, acc:0.87, touches:5 },
-    { day:20, mode:'full_replay',    tokens:1180,  wall:3.0,  questions:0, shown:5, kept:5, acc:0.90, touches:5 }
-  ],
+  runs: [{
+    day: 1,
+    mode: 'first_run',
+    tokens: 14820,
+    wall: 21.4,
+    questions: 6,
+    shown: 5,
+    kept: 2,
+    acc: 0.40,
+    touches: 14
+  }, {
+    day: 2,
+    mode: 'first_run',
+    tokens: 12140,
+    wall: 18.9,
+    questions: 5,
+    shown: 5,
+    kept: 2,
+    acc: 0.44,
+    touches: 12
+  }, {
+    day: 3,
+    mode: 'partial_replay',
+    tokens: 9380,
+    wall: 14.2,
+    questions: 4,
+    shown: 5,
+    kept: 3,
+    acc: 0.48,
+    touches: 11
+  }, {
+    day: 4,
+    mode: 'partial_replay',
+    tokens: 6820,
+    wall: 11.6,
+    questions: 4,
+    shown: 5,
+    kept: 3,
+    acc: 0.52,
+    touches: 10
+  }, {
+    day: 5,
+    mode: 'partial_replay',
+    tokens: 5210,
+    wall: 9.4,
+    questions: 3,
+    shown: 5,
+    kept: 3,
+    acc: 0.55,
+    touches: 9
+  }, {
+    day: 6,
+    mode: 'full_replay',
+    tokens: 4080,
+    wall: 7.1,
+    questions: 2,
+    shown: 5,
+    kept: 3,
+    acc: 0.58,
+    touches: 8
+  }, {
+    day: 7,
+    mode: 'full_replay',
+    tokens: 3560,
+    wall: 6.3,
+    questions: 2,
+    shown: 5,
+    kept: 3,
+    acc: 0.63,
+    touches: 8
+  }, {
+    day: 8,
+    mode: 'full_replay',
+    tokens: 3120,
+    wall: 5.6,
+    questions: 1,
+    shown: 5,
+    kept: 4,
+    acc: 0.66,
+    touches: 7
+  }, {
+    day: 9,
+    mode: 'full_replay',
+    tokens: 2880,
+    wall: 5.2,
+    questions: 1,
+    shown: 5,
+    kept: 3,
+    acc: 0.68,
+    touches: 7
+  }, {
+    day: 10,
+    mode: 'full_replay',
+    tokens: 2610,
+    wall: 4.8,
+    questions: 1,
+    shown: 5,
+    kept: 4,
+    acc: 0.72,
+    touches: 7
+  }, {
+    day: 11,
+    mode: 'full_replay',
+    tokens: 2400,
+    wall: 4.4,
+    questions: 0,
+    shown: 5,
+    kept: 4,
+    acc: 0.74,
+    touches: 6
+  }, {
+    day: 12,
+    mode: 'partial_replay',
+    tokens: 3390,
+    wall: 6.0,
+    questions: 1,
+    shown: 5,
+    kept: 4,
+    acc: 0.73,
+    touches: 7,
+    note: 'It met a task shape it had never seen, so it had to work that one out. The rest came from memory.'
+  }, {
+    day: 13,
+    mode: 'full_replay',
+    tokens: 2180,
+    wall: 4.1,
+    questions: 0,
+    shown: 5,
+    kept: 4,
+    acc: 0.78,
+    touches: 6
+  }, {
+    day: 14,
+    mode: 'full_replay',
+    tokens: 2020,
+    wall: 3.9,
+    questions: 0,
+    shown: 5,
+    kept: 4,
+    acc: 0.80,
+    touches: 6
+  }, {
+    day: 15,
+    mode: 'full_replay',
+    tokens: 1940,
+    wall: 3.7,
+    questions: 0,
+    shown: 5,
+    kept: 4,
+    acc: 0.82,
+    touches: 6
+  }, {
+    day: 16,
+    mode: 'full_replay',
+    tokens: 1860,
+    wall: 3.5,
+    questions: 0,
+    shown: 5,
+    kept: 4,
+    acc: 0.84,
+    touches: 6
+  }, {
+    day: 17,
+    mode: 'full_replay',
+    tokens: 1790,
+    wall: 3.4,
+    questions: 0,
+    shown: 5,
+    kept: 5,
+    acc: 0.85,
+    touches: 5
+  }, {
+    day: 18,
+    mode: 'full_replay',
+    tokens: 1710,
+    wall: 3.3,
+    questions: 0,
+    shown: 5,
+    kept: 4,
+    acc: 0.86,
+    touches: 6
+  }, {
+    day: 19,
+    mode: 'full_replay',
+    tokens: 1240,
+    wall: 3.1,
+    questions: 0,
+    shown: 5,
+    kept: 5,
+    acc: 0.87,
+    touches: 5
+  }, {
+    day: 20,
+    mode: 'full_replay',
+    tokens: 1180,
+    wall: 3.0,
+    questions: 0,
+    shown: 5,
+    kept: 5,
+    acc: 0.90,
+    touches: 5
+  }],
   stats: {
     day: 20,
-    cost:      { value: 1180, first: 14820, drop_pct: 92 },
-    questions: { value: 0,    first: 6 },
-    accuracy:  { value: 0.90, first: 0.40 },
-    touches:   { value: 5,    first: 14 }
+    cost: {
+      value: 1180,
+      first: 14820,
+      drop_pct: 92
+    },
+    questions: {
+      value: 0,
+      first: 6
+    },
+    accuracy: {
+      value: 0.90,
+      first: 0.40
+    },
+    touches: {
+      value: 5,
+      first: 14
+    }
   },
-  shortlist: [
-    { job_id:'s1', title:'Senior PM, Integrations', company:'Linear',
-      meta:'Remote (US/EU) · $190k–$230k · you can back up 4 of the 5 things they ask for',
-      predicted:'keep', score:0.88, why_source:'stored',
-      why:'Stripe replied to you about a similar job on day 6, and this company is under 2,000 people, which you told it you prefer.',
-      gaps:['Kubernetes'] },
-    { job_id:'s2', title:'Principal PM, Payments Infrastructure', company:'Mercury',
-      meta:'San Francisco · $235k–$280k · you can back up 5 of the 6 things they ask for',
-      predicted:'skip', score:0.79, why_source:'stored',
-      why:'You match nearly everything they ask for, but you turned down two jobs at this level for being too senior.',
-      gaps:[] },
-    { job_id:'s3', title:'Product Manager, Payroll', company:'Deel',
-      meta:'Remote (Global) · $160k–$195k',
-      predicted:'skip', score:0.72, why_source:'stored',
-      why:'The pay is in the bottom third for this job title, compared against 1,043 real job ads.',
-      gaps:[] }
-  ],
+  shortlist: [{
+    job_id: 's1',
+    title: 'Senior PM, Integrations',
+    company: 'Linear',
+    meta: 'Remote (US/EU) · $190k–$230k · you can back up 4 of the 5 things they ask for',
+    predicted: 'keep',
+    score: 0.88,
+    why_source: 'stored',
+    why: 'Stripe replied to you about a similar job on day 6, and this company is under 2,000 people, which you told it you prefer.',
+    gaps: ['Kubernetes']
+  }, {
+    job_id: 's2',
+    title: 'Principal PM, Payments Infrastructure',
+    company: 'Mercury',
+    meta: 'San Francisco · $235k–$280k · you can back up 5 of the 6 things they ask for',
+    predicted: 'skip',
+    score: 0.79,
+    why_source: 'stored',
+    why: 'You match nearly everything they ask for, but you turned down two jobs at this level for being too senior.',
+    gaps: []
+  }, {
+    job_id: 's3',
+    title: 'Product Manager, Payroll',
+    company: 'Deel',
+    meta: 'Remote (Global) · $160k–$195k',
+    predicted: 'skip',
+    score: 0.72,
+    why_source: 'stored',
+    why: 'The pay is in the bottom third for this job title, compared against 1,043 real job ads.',
+    gaps: []
+  }],
   knowledge: {
-    claims: 24, answers: 7, rules: 3, plays: 3,
-    rule_texts: ['Companies under 2,000 people', 'Nothing at staff level or above',
-                 'Remote, or within reach of Seattle'],
-    readiness: { value: 0.8, window: 5, agreed: 4, threshold: 0.8, state: 'Ready' },
-    autonomy: { shortlisting: 'Autonomous', preference_rules: 'Supervised' }
+    claims: 24,
+    answers: 7,
+    rules: 3,
+    plays: 3,
+    rule_texts: ['Companies under 2,000 people', 'Nothing at staff level or above', 'Remote, or within reach of Seattle'],
+    readiness: {
+      value: 0.8,
+      window: 5,
+      agreed: 4,
+      threshold: 0.8,
+      state: 'Ready'
+    },
+    autonomy: {
+      shortlisting: 'Autonomous',
+      preference_rules: 'Supervised'
+    }
   }
 };
-
 const MODES = {
-  first_run:      { label: 'Worked it out',   hint: 'first time, nothing to reuse', color: 'var(--first)' },
-  partial_replay: { label: 'Mostly memory',   hint: 'reused most of it, thought about the new part', color: 'var(--partial)' },
-  full_replay:    { label: 'Pure memory',     hint: 'did the whole thing from memory', color: 'var(--full)' }
+  first_run: {
+    label: 'Worked it out',
+    hint: 'first time, nothing to reuse',
+    color: 'var(--first)'
+  },
+  partial_replay: {
+    label: 'Mostly memory',
+    hint: 'reused most of it, thought about the new part',
+    color: 'var(--partial)'
+  },
+  full_replay: {
+    label: 'Pure memory',
+    hint: 'did the whole thing from memory',
+    color: 'var(--full)'
+  }
 };
-
 const COST_LABEL = {
-  tokens:     { card: 'Tokens used today', col: 'Tokens',    axis: 'AI tokens spent each day' },
-  tool_calls: { card: 'Tool calls today',  col: 'Tool calls',
-                axis: 'tool calls made each day — a stand-in for cost, not a token count' }
+  tokens: {
+    card: 'Tokens used today',
+    col: 'Tokens',
+    axis: 'AI tokens spent each day'
+  },
+  tool_calls: {
+    card: 'Tool calls today',
+    col: 'Tool calls',
+    axis: 'tool calls made each day — a stand-in for cost, not a token count'
+  }
 };
-
-const fmt = n => (n == null ? '—' : Number(n).toLocaleString('en-US'));
-const pct = v => (v == null ? '—' : Math.round(v * 100) + '%');
+const fmt = n => n == null ? '—' : Number(n).toLocaleString('en-US');
+const pct = v => v == null ? '—' : Math.round(v * 100) + '%';
 const modeOf = r => MODES[r.mode] || MODES.first_run;
-
-const L = 60, R = 948;
-const xOf = (i, n) => (n < 2 ? (L + R) / 2 : L + (R - L) * (i / (n - 1)));
+const L = 60,
+  R = 948;
+const xOf = (i, n) => n < 2 ? (L + R) / 2 : L + (R - L) * (i / (n - 1));
 
 /* A round number at or above the largest value, so the axis is readable
    whatever the real data turns out to be. */
@@ -347,9 +592,13 @@ function niceMax(values) {
 /* Nulls break the line rather than being bridged: an absent metric is not a
    value, and joining across it would draw a measurement nobody took. */
 function linePath(values, xf, yf) {
-  let path = '', pen = false;
+  let path = '',
+    pen = false;
   values.forEach((v, i) => {
-    if (v == null) { pen = false; return; }
+    if (v == null) {
+      pen = false;
+      return;
+    }
     path += (pen ? ' L' : ' M') + xf(i) + ' ' + yf(v);
     pen = true;
   });
@@ -357,7 +606,11 @@ function linePath(values, xf, yf) {
 }
 
 /* ---- chart primitives ---- */
-function Frame({ bot, ticks, fmtTick }) {
+function Frame({
+  bot,
+  ticks,
+  fmtTick
+}) {
   /* Two ticks that print the same label are one tick — on a chart whose real
      maximum is 1, "1 / 1 / 0" is noise, not an axis. */
   const seen = new Set();
@@ -367,178 +620,302 @@ function Frame({ bot, ticks, fmtTick }) {
     seen.add(label);
     return true;
   });
-  return (
-    <Fragment>
-      {shown.map(t => (
-        <Fragment key={t.v}>
-          <line x1={L} x2={R} y1={t.y} y2={t.y} stroke="var(--grid)" strokeWidth="1" />
-          <text x={L - 13} y={t.y + 3.5} textAnchor="end">{fmtTick(t.v)}</text>
-        </Fragment>
-      ))}
-      <line x1={L} x2={R} y1={bot} y2={bot} stroke="var(--axis)" strokeWidth="1" />
-    </Fragment>
-  );
+  return /*#__PURE__*/React.createElement(Fragment, null, shown.map(t => /*#__PURE__*/React.createElement(Fragment, {
+    key: t.v
+  }, /*#__PURE__*/React.createElement("line", {
+    x1: L,
+    x2: R,
+    y1: t.y,
+    y2: t.y,
+    stroke: "var(--grid)",
+    strokeWidth: "1"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: L - 13,
+    y: t.y + 3.5,
+    textAnchor: "end"
+  }, fmtTick(t.v)))), /*#__PURE__*/React.createElement("line", {
+    x1: L,
+    x2: R,
+    y1: bot,
+    y2: bot,
+    stroke: "var(--axis)",
+    strokeWidth: "1"
+  }));
 }
-
-function DirectLabel({ x, y, anchor = 'start', children }) {
-  return <text x={x} y={y} textAnchor={anchor} className="direct">{children}</text>;
+function DirectLabel({
+  x,
+  y,
+  anchor = 'start',
+  children
+}) {
+  return /*#__PURE__*/React.createElement("text", {
+    x: x,
+    y: y,
+    textAnchor: anchor,
+    className: "direct"
+  }, children);
 }
-
-function Crosshair({ i, n, height }) {
-  return (
-    <line
-      x1={i == null ? 0 : xOf(i, n)} x2={i == null ? 0 : xOf(i, n)} y1={0} y2={height}
-      stroke="var(--ink-muted)" strokeWidth="1" strokeDasharray="3 3"
-      opacity={i == null ? 0 : 0.55}
-    />
-  );
+function Crosshair({
+  i,
+  n,
+  height
+}) {
+  return /*#__PURE__*/React.createElement("line", {
+    x1: i == null ? 0 : xOf(i, n),
+    x2: i == null ? 0 : xOf(i, n),
+    y1: 0,
+    y2: height,
+    stroke: "var(--ink-muted)",
+    strokeWidth: "1",
+    strokeDasharray: "3 3",
+    opacity: i == null ? 0 : 0.55
+  });
 }
 
 /* ---- panel 1: cost ---- */
-function CostPlot({ runs, costKey, hover }) {
-  const n = runs.length, top = 22, bot = 122;
+function CostPlot({
+  runs,
+  costKey,
+  hover
+}) {
+  const n = runs.length,
+    top = 22,
+    bot = 122;
   const values = runs.map(r => r[costKey] ?? null);
   const max = niceMax(values);
-  const y = v => bot - (v / max) * (bot - top);
+  const y = v => bot - v / max * (bot - top);
   const xf = i => xOf(i, n);
-
   const area = values.map((v, i) => [xf(i), y(v ?? 0)].join(',')).join(' ');
   const spike = runs.findIndex(r => r.note);
-  const first = values[0], last = values[n - 1];
-
-  return (
-    <svg className="plot" id="plot-tokens" viewBox="0 0 1000 150" role="img"
-         aria-label={`Cost per day, from ${fmt(first)} on day ${runs[0].day} to ${fmt(last)} on day ${runs[n - 1].day}.`}>
-      <Frame bot={bot} ticks={[max, max / 2, 0].map(v => ({ v, y: y(v) }))}
-             fmtTick={v => (v >= 1000 ? (v / 1000) + 'k' : String(Math.round(v)))} />
-
-      <polygon points={`${L},${bot} ${area} ${R},${bot}`} fill="var(--full)" opacity="0.10" />
-      <path d={linePath(values, xf, y)} fill="none" stroke="var(--ink-2)" strokeWidth="2"
-            strokeLinejoin="round" strokeLinecap="round" />
-      {runs.map((r, i) => values[i] == null ? null : (
-        <circle key={r.day} cx={xf(i)} cy={y(values[i])} r="4.5"
-                fill={modeOf(r).color} stroke="var(--surface)" strokeWidth="2" />
-      ))}
-
-      {first != null && <DirectLabel x={L} y={y(first) - 11}>{fmt(first)}</DirectLabel>}
-      {last != null && <DirectLabel x={R + 10} y={y(last) + 4}>{fmt(last)}</DirectLabel>}
-
-      {spike >= 0 && values[spike] != null && (
-        <Fragment>
-          <line x1={xf(spike)} x2={xf(spike)} y1={y(values[spike]) - 9} y2={top - 6}
-                stroke="var(--axis)" strokeWidth="1" strokeDasharray="2 3" />
-          <text x={xf(spike) - 6} y={top - 10} textAnchor="end">met something it had never seen</text>
-        </Fragment>
-      )}
-
-      <Crosshair i={hover} n={n} height={150} />
-    </svg>
-  );
+  const first = values[0],
+    last = values[n - 1];
+  return /*#__PURE__*/React.createElement("svg", {
+    className: "plot",
+    id: "plot-tokens",
+    viewBox: "0 0 1000 150",
+    role: "img",
+    "aria-label": `Cost per day, from ${fmt(first)} on day ${runs[0].day} to ${fmt(last)} on day ${runs[n - 1].day}.`
+  }, /*#__PURE__*/React.createElement(Frame, {
+    bot: bot,
+    ticks: [max, max / 2, 0].map(v => ({
+      v,
+      y: y(v)
+    })),
+    fmtTick: v => v >= 1000 ? v / 1000 + 'k' : String(Math.round(v))
+  }), /*#__PURE__*/React.createElement("polygon", {
+    points: `${L},${bot} ${area} ${R},${bot}`,
+    fill: "var(--full)",
+    opacity: "0.10"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: linePath(values, xf, y),
+    fill: "none",
+    stroke: "var(--ink-2)",
+    strokeWidth: "2",
+    strokeLinejoin: "round",
+    strokeLinecap: "round"
+  }), runs.map((r, i) => values[i] == null ? null : /*#__PURE__*/React.createElement("circle", {
+    key: r.day,
+    cx: xf(i),
+    cy: y(values[i]),
+    r: "4.5",
+    fill: modeOf(r).color,
+    stroke: "var(--surface)",
+    strokeWidth: "2"
+  })), first != null && /*#__PURE__*/React.createElement(DirectLabel, {
+    x: L,
+    y: y(first) - 11
+  }, fmt(first)), last != null && /*#__PURE__*/React.createElement(DirectLabel, {
+    x: R + 10,
+    y: y(last) + 4
+  }, fmt(last)), spike >= 0 && values[spike] != null && /*#__PURE__*/React.createElement(Fragment, null, /*#__PURE__*/React.createElement("line", {
+    x1: xf(spike),
+    x2: xf(spike),
+    y1: y(values[spike]) - 9,
+    y2: top - 6,
+    stroke: "var(--axis)",
+    strokeWidth: "1",
+    strokeDasharray: "2 3"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: xf(spike) - 6,
+    y: top - 10,
+    textAnchor: "end"
+  }, "met something it had never seen")), /*#__PURE__*/React.createElement(Crosshair, {
+    i: hover,
+    n: n,
+    height: 150
+  }));
 }
 
 /* ---- panel 2: questions ---- */
-function QuestionsPlot({ runs, hover }) {
-  const n = runs.length, top = 16, bot = 88;
+function QuestionsPlot({
+  runs,
+  hover
+}) {
+  const n = runs.length,
+    top = 16,
+    bot = 88;
   const max = Math.max(1, ...runs.map(r => r.questions || 0));
-  const y = v => bot - (v / max) * (bot - top);
+  const y = v => bot - v / max * (bot - top);
   const xf = i => xOf(i, n);
-  const w = Math.max(3, Math.min(16, ((R - L) / Math.max(n, 1)) * 0.6));
-
-  const firstQuiet = runs.findIndex((r, i) =>
-    !r.questions && runs.slice(i).every(x => !x.questions));
-
-  return (
-    <svg className="plot" id="plot-questions" viewBox="0 0 1000 116" role="img"
-         aria-label={`Questions it asked you, from ${runs[0].questions} on day ${runs[0].day} onward.`}>
-      <Frame bot={bot} ticks={[max, max / 2, 0].map(v => ({ v, y: y(v) }))}
-             fmtTick={v => String(Math.round(v))} />
-
-      {runs.map((r, i) => !r.questions ? (
-        <circle key={r.day} cx={xf(i)} cy={bot} r="2.5" fill="var(--axis)" />
-      ) : (
-        <Fragment key={r.day}>
-          <rect x={xf(i) - w / 2} y={y(r.questions)} width={w} height={bot - y(r.questions)}
-                rx="4" ry="4" fill={modeOf(r).color} />
-          <rect x={xf(i) - w / 2} y={bot - 5} width={w} height="5" fill={modeOf(r).color} />
-        </Fragment>
-      ))}
-
-      {runs[0].questions > 0 &&
-        <DirectLabel x={L} y={y(runs[0].questions) - 9}>asked you {runs[0].questions} things</DirectLabel>}
-      {firstQuiet > 0 &&
-        <DirectLabel x={xf(firstQuiet) + 8} y={bot - 17}>never had to ask again</DirectLabel>}
-
-      <Crosshair i={hover} n={n} height={116} />
-    </svg>
-  );
+  const w = Math.max(3, Math.min(16, (R - L) / Math.max(n, 1) * 0.6));
+  const firstQuiet = runs.findIndex((r, i) => !r.questions && runs.slice(i).every(x => !x.questions));
+  return /*#__PURE__*/React.createElement("svg", {
+    className: "plot",
+    id: "plot-questions",
+    viewBox: "0 0 1000 116",
+    role: "img",
+    "aria-label": `Questions it asked you, from ${runs[0].questions} on day ${runs[0].day} onward.`
+  }, /*#__PURE__*/React.createElement(Frame, {
+    bot: bot,
+    ticks: [max, max / 2, 0].map(v => ({
+      v,
+      y: y(v)
+    })),
+    fmtTick: v => String(Math.round(v))
+  }), runs.map((r, i) => !r.questions ? /*#__PURE__*/React.createElement("circle", {
+    key: r.day,
+    cx: xf(i),
+    cy: bot,
+    r: "2.5",
+    fill: "var(--axis)"
+  }) : /*#__PURE__*/React.createElement(Fragment, {
+    key: r.day
+  }, /*#__PURE__*/React.createElement("rect", {
+    x: xf(i) - w / 2,
+    y: y(r.questions),
+    width: w,
+    height: bot - y(r.questions),
+    rx: "4",
+    ry: "4",
+    fill: modeOf(r).color
+  }), /*#__PURE__*/React.createElement("rect", {
+    x: xf(i) - w / 2,
+    y: bot - 5,
+    width: w,
+    height: "5",
+    fill: modeOf(r).color
+  }))), runs[0].questions > 0 && /*#__PURE__*/React.createElement(DirectLabel, {
+    x: L,
+    y: y(runs[0].questions) - 9
+  }, "asked you ", runs[0].questions, " things"), firstQuiet > 0 && /*#__PURE__*/React.createElement(DirectLabel, {
+    x: xf(firstQuiet) + 8,
+    y: bot - 17
+  }, "never had to ask again"), /*#__PURE__*/React.createElement(Crosshair, {
+    i: hover,
+    n: n,
+    height: 116
+  }));
 }
 
 /* ---- panel 3: accuracy ---- */
-function AccuracyPlot({ runs, hover }) {
-  const n = runs.length, top = 22, bot = 122, hi = 1;
-  const values = runs.map(r => (r.acc == null ? null : r.acc));
+function AccuracyPlot({
+  runs,
+  hover
+}) {
+  const n = runs.length,
+    top = 22,
+    bot = 122,
+    hi = 1;
+  const values = runs.map(r => r.acc == null ? null : r.acc);
   const known = values.filter(v => v != null);
   const lo = Math.max(0, Math.min(0.3, Math.min(...(known.length ? known : [0.3])) - 0.1));
-  const y = v => bot - ((v - lo) / (hi - lo)) * (bot - top);
+  const y = v => bot - (v - lo) / (hi - lo) * (bot - top);
   const xf = i => xOf(i, n);
-
   const firstKnown = values.findIndex(v => v != null);
   const lastKnown = values.length - 1 - [...values].reverse().findIndex(v => v != null);
-
-  return (
-    <svg className="plot" id="plot-acc" viewBox="0 0 1000 150" role="img"
-         aria-label={known.length
-           ? `How often it guessed your decision correctly, from ${pct(known[0])} to ${pct(known[known.length - 1])}.`
-           : 'No resolved predictions yet.'}>
-      <Frame bot={bot} ticks={[hi, (hi + lo) / 2, lo].map(v => ({ v, y: y(v) }))}
-             fmtTick={v => Math.round(v * 100) + '%'} />
-
-      <path d={linePath(values, xf, y)} fill="none" stroke="var(--ink-2)" strokeWidth="2"
-            strokeLinejoin="round" strokeLinecap="round" />
-      {runs.map((r, i) => values[i] == null ? null : (
-        <circle key={r.day} cx={xf(i)} cy={y(values[i])} r="4.5"
-                fill={modeOf(r).color} stroke="var(--surface)" strokeWidth="2" />
-      ))}
-
-      {firstKnown >= 0 && (
-        <DirectLabel x={L} y={y(values[firstKnown]) + 20}>
-          {pct(values[firstKnown])}{values[firstKnown] < 0.6 ? ' — barely better than a coin flip' : ''}
-        </DirectLabel>
-      )}
-      {firstKnown >= 0 &&
-        <DirectLabel x={R + 10} y={y(values[lastKnown]) + 4}>{pct(values[lastKnown])}</DirectLabel>}
-      {!known.length &&
-        <text x={(L + R) / 2} y={(top + bot) / 2} textAnchor="middle">no resolved predictions yet</text>}
-
-      <Crosshair i={hover} n={n} height={150} />
-    </svg>
-  );
+  return /*#__PURE__*/React.createElement("svg", {
+    className: "plot",
+    id: "plot-acc",
+    viewBox: "0 0 1000 150",
+    role: "img",
+    "aria-label": known.length ? `How often it guessed your decision correctly, from ${pct(known[0])} to ${pct(known[known.length - 1])}.` : 'No resolved predictions yet.'
+  }, /*#__PURE__*/React.createElement(Frame, {
+    bot: bot,
+    ticks: [hi, (hi + lo) / 2, lo].map(v => ({
+      v,
+      y: y(v)
+    })),
+    fmtTick: v => Math.round(v * 100) + '%'
+  }), /*#__PURE__*/React.createElement("path", {
+    d: linePath(values, xf, y),
+    fill: "none",
+    stroke: "var(--ink-2)",
+    strokeWidth: "2",
+    strokeLinejoin: "round",
+    strokeLinecap: "round"
+  }), runs.map((r, i) => values[i] == null ? null : /*#__PURE__*/React.createElement("circle", {
+    key: r.day,
+    cx: xf(i),
+    cy: y(values[i]),
+    r: "4.5",
+    fill: modeOf(r).color,
+    stroke: "var(--surface)",
+    strokeWidth: "2"
+  })), firstKnown >= 0 && /*#__PURE__*/React.createElement(DirectLabel, {
+    x: L,
+    y: y(values[firstKnown]) + 20
+  }, pct(values[firstKnown]), values[firstKnown] < 0.6 ? ' — barely better than a coin flip' : ''), firstKnown >= 0 && /*#__PURE__*/React.createElement(DirectLabel, {
+    x: R + 10,
+    y: y(values[lastKnown]) + 4
+  }, pct(values[lastKnown])), !known.length && /*#__PURE__*/React.createElement("text", {
+    x: (L + R) / 2,
+    y: (top + bot) / 2,
+    textAnchor: "middle"
+  }, "no resolved predictions yet"), /*#__PURE__*/React.createElement(Crosshair, {
+    i: hover,
+    n: n,
+    height: 150
+  }));
 }
 
 /* ---- tooltip ---- */
-function Tip({ runs, costKey, costLabel, hover, tipRef }) {
+function Tip({
+  runs,
+  costKey,
+  costLabel,
+  hover,
+  tipRef
+}) {
   if (hover == null || !runs[hover]) {
-    return <div className="tip" id="tip" ref={tipRef} data-on="0" aria-hidden="true" />;
+    return /*#__PURE__*/React.createElement("div", {
+      className: "tip",
+      id: "tip",
+      ref: tipRef,
+      "data-on": "0",
+      "aria-hidden": "true"
+    });
   }
-  const r = runs[hover], m = modeOf(r);
-  return (
-    <div className="tip" id="tip" ref={tipRef} data-on="1" aria-hidden="true">
-      <div className="t-run">DAY {r.day}</div>
-      <div className="t-mode"><i style={{ background: m.color }} />{m.label}</div>
-      <dl>
-        {costKey && <Fragment><dt>{costLabel}</dt><dd>{fmt(r[costKey])}</dd></Fragment>}
-        <dt>Time taken</dt><dd>{r.wall == null ? '—' : r.wall.toFixed(1) + 's'}</dd>
-        <dt>Questions asked</dt><dd>{r.questions}</dd>
-        <dt>Guessed right</dt><dd>{pct(r.acc)}</dd>
-        <dt>Times you stepped in</dt><dd>{r.touches}</dd>
-      </dl>
-      {r.note && <p style={{ margin: '8px 0 0', fontSize: '12px', color: 'var(--ink-2)', maxWidth: '210px' }}>{r.note}</p>}
-    </div>
-  );
+  const r = runs[hover],
+    m = modeOf(r);
+  return /*#__PURE__*/React.createElement("div", {
+    className: "tip",
+    id: "tip",
+    ref: tipRef,
+    "data-on": "1",
+    "aria-hidden": "true"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "t-run"
+  }, "DAY ", r.day), /*#__PURE__*/React.createElement("div", {
+    className: "t-mode"
+  }, /*#__PURE__*/React.createElement("i", {
+    style: {
+      background: m.color
+    }
+  }), m.label), /*#__PURE__*/React.createElement("dl", null, costKey && /*#__PURE__*/React.createElement(Fragment, null, /*#__PURE__*/React.createElement("dt", null, costLabel), /*#__PURE__*/React.createElement("dd", null, fmt(r[costKey]))), /*#__PURE__*/React.createElement("dt", null, "Time taken"), /*#__PURE__*/React.createElement("dd", null, r.wall == null ? '—' : r.wall.toFixed(1) + 's'), /*#__PURE__*/React.createElement("dt", null, "Questions asked"), /*#__PURE__*/React.createElement("dd", null, r.questions), /*#__PURE__*/React.createElement("dt", null, "Guessed right"), /*#__PURE__*/React.createElement("dd", null, pct(r.acc)), /*#__PURE__*/React.createElement("dt", null, "Times you stepped in"), /*#__PURE__*/React.createElement("dd", null, r.touches)), r.note && /*#__PURE__*/React.createElement("p", {
+    style: {
+      margin: '8px 0 0',
+      fontSize: '12px',
+      color: 'var(--ink-2)',
+      maxWidth: '210px'
+    }
+  }, r.note));
 }
 
 /* ---- the three charts with a shared crosshair ---- */
-function Charts({ runs, costBasis }) {
+function Charts({
+  runs,
+  costBasis
+}) {
   const [hover, setHover] = useState(null);
   const [at, setAt] = useState(null);
   const hostRef = useRef(null);
@@ -546,9 +923,9 @@ function Charts({ runs, costBasis }) {
   const n = runs.length;
   const cost = COST_LABEL[costBasis];
   const costKey = costBasis === 'tool_calls' ? 'tool_calls' : costBasis === 'tokens' ? 'tokens' : null;
-
   useLayoutEffect(() => {
-    const tip = tipRef.current, host = hostRef.current;
+    const tip = tipRef.current,
+      host = hostRef.current;
     if (!tip || !host || hover == null || !at) return;
     const hostBox = host.getBoundingClientRect();
     const x = Math.max(100, Math.min(hostBox.width - 100, at.clientX - hostBox.left));
@@ -557,349 +934,367 @@ function Charts({ runs, costBasis }) {
     tip.style.left = x + 'px';
     tip.style.top = y + 'px';
   }, [hover, at]);
-
   function onMove(ev) {
     const host = hostRef.current;
     const plot = ev.target.closest('svg.plot') || host.querySelector('svg.plot');
     if (!plot || n < 1) return;
     const box = plot.getBoundingClientRect();
     const vb = plot.viewBox.baseVal.width;
-    const vx = ((ev.clientX - box.left) / box.width) * vb;
-    if (vx < L - 20 || vx > R + 20) { setHover(null); return; }
-    const i = n < 2 ? 0 : Math.round(((vx - L) / (R - L)) * (n - 1));
+    const vx = (ev.clientX - box.left) / box.width * vb;
+    if (vx < L - 20 || vx > R + 20) {
+      setHover(null);
+      return;
+    }
+    const i = n < 2 ? 0 : Math.round((vx - L) / (R - L) * (n - 1));
     setHover(Math.max(0, Math.min(n - 1, i)));
-    setAt({ clientX: ev.clientX, clientY: ev.clientY });
+    setAt({
+      clientX: ev.clientX,
+      clientY: ev.clientY
+    });
   }
-
-  return (
-    <div className="charts" id="charts" ref={hostRef} onPointerMove={onMove} onPointerLeave={() => setHover(null)}>
-      {costKey ? (
-        <div className="chart-row">
-          <div className="eyebrow">It costs less <span className="read">{cost.axis}</span></div>
-          <CostPlot runs={runs} costKey={costKey} hover={hover} />
-        </div>
-      ) : (
-        <div className="chart-row">
-          <div className="eyebrow">It costs less <span className="read">not measured yet</span></div>
-          <p style={{ margin: '10px 0 14px', fontSize: '13px', color: 'var(--ink-2)' }}>
-            The orchestrator does not report token usage to us yet, so there is nothing
-            honest to draw here. The two lines below do not depend on it.
-          </p>
-        </div>
-      )}
-      <div className="chart-row">
-        <div className="eyebrow">It needs you less <span className="read">questions it had to ask you</span></div>
-        <QuestionsPlot runs={runs} hover={hover} />
-      </div>
-      <div className="chart-row">
-        <div className="eyebrow">It knows you better <span className="read">how often it correctly guessed your decision</span></div>
-        <AccuracyPlot runs={runs} hover={hover} />
-      </div>
-      <Tip runs={runs} costKey={costKey} costLabel={cost ? cost.card.replace(' today', '') : ''}
-           hover={hover} tipRef={tipRef} />
-    </div>
-  );
+  return /*#__PURE__*/React.createElement("div", {
+    className: "charts",
+    id: "charts",
+    ref: hostRef,
+    onPointerMove: onMove,
+    onPointerLeave: () => setHover(null)
+  }, costKey ? /*#__PURE__*/React.createElement("div", {
+    className: "chart-row"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "eyebrow"
+  }, "It costs less ", /*#__PURE__*/React.createElement("span", {
+    className: "read"
+  }, cost.axis)), /*#__PURE__*/React.createElement(CostPlot, {
+    runs: runs,
+    costKey: costKey,
+    hover: hover
+  })) : /*#__PURE__*/React.createElement("div", {
+    className: "chart-row"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "eyebrow"
+  }, "It costs less ", /*#__PURE__*/React.createElement("span", {
+    className: "read"
+  }, "not measured yet")), /*#__PURE__*/React.createElement("p", {
+    style: {
+      margin: '10px 0 14px',
+      fontSize: '13px',
+      color: 'var(--ink-2)'
+    }
+  }, "The orchestrator does not report token usage to us yet, so there is nothing honest to draw here. The two lines below do not depend on it.")), /*#__PURE__*/React.createElement("div", {
+    className: "chart-row"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "eyebrow"
+  }, "It needs you less ", /*#__PURE__*/React.createElement("span", {
+    className: "read"
+  }, "questions it had to ask you")), /*#__PURE__*/React.createElement(QuestionsPlot, {
+    runs: runs,
+    hover: hover
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "chart-row"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "eyebrow"
+  }, "It knows you better ", /*#__PURE__*/React.createElement("span", {
+    className: "read"
+  }, "how often it correctly guessed your decision")), /*#__PURE__*/React.createElement(AccuracyPlot, {
+    runs: runs,
+    hover: hover
+  })), /*#__PURE__*/React.createElement(Tip, {
+    runs: runs,
+    costKey: costKey,
+    costLabel: cost ? cost.card.replace(' today', '') : '',
+    hover: hover,
+    tipRef: tipRef
+  }));
 }
 
 /* ---- page sections ---- */
-function Masthead({ doc }) {
-  const runs = doc.runs, last = runs[runs.length - 1];
+function Masthead({
+  doc
+}) {
+  const runs = doc.runs,
+    last = runs[runs.length - 1];
   const autonomous = (doc.knowledge.autonomy || {}).shortlisting === 'Autonomous';
-  return (
-    <header className="masthead">
-      <div>
-        <div className="eyebrow">Your job search · day {doc.day}</div>
-        <h1>Muscle Memory</h1>
-        <p className="sub">An assistant that hunts for jobs on your behalf. The longer it runs, the cheaper it gets, the less it has to ask you, and the better it gets at knowing which jobs you actually want.</p>
-      </div>
-      <div className="masthead-meta">
-        {!doc.live && <span className="chip sample">Example numbers, not live yet</span>}
-        <span className={autonomous ? 'chip auto' : 'chip'}>
-          {autonomous ? 'Picking jobs without asking' : 'Still asks before it picks'}
-        </span>
-        {last && (
-          <span className="chip">
-            <span className="dot" style={{ background: modeOf(last).color }} />
-            {last.mode === 'full_replay' ? 'Today it worked purely from memory'
-              : last.mode === 'partial_replay' ? 'Today it worked mostly from memory'
-              : 'Today it worked it out from scratch'}
-          </span>
-        )}
-      </div>
-    </header>
-  );
+  return /*#__PURE__*/React.createElement("header", {
+    className: "masthead"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "eyebrow"
+  }, "Your job search \xB7 day ", doc.day), /*#__PURE__*/React.createElement("h1", null, "the right job"), /*#__PURE__*/React.createElement("p", {
+    className: "sub"
+  }, "An assistant that hunts for jobs on your behalf. The longer it runs, the cheaper it gets, the less it has to ask you, and the better it gets at knowing which jobs you actually want.")), /*#__PURE__*/React.createElement("div", {
+    className: "masthead-meta"
+  }, !doc.live && /*#__PURE__*/React.createElement("span", {
+    className: "chip sample"
+  }, "Example numbers, not live yet"), /*#__PURE__*/React.createElement("span", {
+    className: autonomous ? 'chip auto' : 'chip'
+  }, autonomous ? 'Picking jobs without asking' : 'Still asks before it picks'), last && /*#__PURE__*/React.createElement("span", {
+    className: "chip"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "dot",
+    style: {
+      background: modeOf(last).color
+    }
+  }), last.mode === 'full_replay' ? 'Today it worked purely from memory' : last.mode === 'partial_replay' ? 'Today it worked mostly from memory' : 'Today it worked it out from scratch')));
 }
-
-function Stat({ id, label, value, children }) {
-  return (
-    <div className="stat">
-      <span className="label">{label}</span>
-      <span className="value" id={id}>{value}</span>
-      <span className="delta">{children}</span>
-    </div>
-  );
+function Stat({
+  id,
+  label,
+  value,
+  children
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    className: "stat"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "label"
+  }, label), /*#__PURE__*/React.createElement("span", {
+    className: "value",
+    id: id
+  }, value), /*#__PURE__*/React.createElement("span", {
+    className: "delta"
+  }, children));
 }
-
-function Stats({ stats, costBasis, firstDay }) {
+function Stats({
+  stats,
+  costBasis,
+  firstDay
+}) {
   const cost = COST_LABEL[costBasis];
-  return (
-    <section className="stats" aria-label="Latest day against the first">
-      <Stat id="s-tokens" label={cost ? cost.card : 'Cost today'}
-            value={cost ? fmt(stats.cost.value) : '—'}>
-        {cost && stats.cost.drop_pct != null
-          ? <Fragment><b>{stats.cost.drop_pct}% cheaper</b> than day {firstDay}</Fragment>
-          : 'Not measured yet'}
-      </Stat>
-      <Stat id="s-questions" label="Questions it asked" value={fmt(stats.questions.value)}>
-        It asked you <b>{fmt(stats.questions.first)}</b> on day {firstDay}
-      </Stat>
-      <Stat id="s-acc" label="Guessed your choice" value={pct(stats.accuracy.value)}>
-        {stats.accuracy.first == null
-          ? 'No resolved predictions yet'
-          : <Fragment>It was right <b>{pct(stats.accuracy.first)}</b> of the time at first</Fragment>}
-      </Stat>
-      <Stat id="s-touches" label="Times you stepped in" value={fmt(stats.touches.value)}>
-        Down from <b>{fmt(stats.touches.first)}</b> on day {firstDay}
-      </Stat>
-    </section>
-  );
+  return /*#__PURE__*/React.createElement("section", {
+    className: "stats",
+    "aria-label": "Latest day against the first"
+  }, /*#__PURE__*/React.createElement(Stat, {
+    id: "s-tokens",
+    label: cost ? cost.card : 'Cost today',
+    value: cost ? fmt(stats.cost.value) : '—'
+  }, cost && stats.cost.drop_pct != null ? /*#__PURE__*/React.createElement(Fragment, null, /*#__PURE__*/React.createElement("b", null, stats.cost.drop_pct, "% cheaper"), " than day ", firstDay) : 'Not measured yet'), /*#__PURE__*/React.createElement(Stat, {
+    id: "s-questions",
+    label: "Questions it asked",
+    value: fmt(stats.questions.value)
+  }, "It asked you ", /*#__PURE__*/React.createElement("b", null, fmt(stats.questions.first)), " on day ", firstDay), /*#__PURE__*/React.createElement(Stat, {
+    id: "s-acc",
+    label: "Guessed your choice",
+    value: pct(stats.accuracy.value)
+  }, stats.accuracy.first == null ? 'No resolved predictions yet' : /*#__PURE__*/React.createElement(Fragment, null, "It was right ", /*#__PURE__*/React.createElement("b", null, pct(stats.accuracy.first)), " of the time at first")), /*#__PURE__*/React.createElement(Stat, {
+    id: "s-touches",
+    label: "Times you stepped in",
+    value: fmt(stats.touches.value)
+  }, "Down from ", /*#__PURE__*/React.createElement("b", null, fmt(stats.touches.first)), " on day ", firstDay));
 }
-
 function Legend() {
-  return (
-    <div className="legend" id="legend">
-      {Object.entries(MODES).map(([key, m]) => (
-        <span key={key}>
-          <i style={{ background: m.color }} />{m.label} <span style={{ color: 'var(--ink-muted)' }}>· {m.hint}</span>
-        </span>
-      ))}
-    </div>
-  );
+  return /*#__PURE__*/React.createElement("div", {
+    className: "legend",
+    id: "legend"
+  }, Object.entries(MODES).map(([key, m]) => /*#__PURE__*/React.createElement("span", {
+    key: key
+  }, /*#__PURE__*/React.createElement("i", {
+    style: {
+      background: m.color
+    }
+  }), m.label, " ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: 'var(--ink-muted)'
+    }
+  }, "\xB7 ", m.hint))));
 }
-
-function TrendPanel({ doc }) {
+function TrendPanel({
+  doc
+}) {
   const runs = doc.runs;
   if (!runs.length) {
-    return (
-      <section className="panel">
-        <div className="panel-head"><div><h2>Getting better</h2>
-          <p>No runs logged yet. Tick a day and this fills in.</p></div></div>
-      </section>
-    );
+    return /*#__PURE__*/React.createElement("section", {
+      className: "panel"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "panel-head"
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h2", null, "Getting better"), /*#__PURE__*/React.createElement("p", null, "No runs logged yet. Tick a day and this fills in."))));
   }
-  return (
-    <section className="panel">
-      <div className="panel-head">
-        <div>
-          <h2>{runs.length} {runs.length === 1 ? 'day' : 'days'} of getting better</h2>
-          <p>It sees a similar pile of jobs every day. What changes is how well it knows you.</p>
-        </div>
-        <Legend />
-      </div>
-      <Charts runs={runs} costBasis={doc.cost_basis} />
-      <div className="axis-note">
-        <span>Day {runs[0].day}</span><span>Day {runs[runs.length - 1].day}</span>
-      </div>
-    </section>
-  );
+  return /*#__PURE__*/React.createElement("section", {
+    className: "panel"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "panel-head"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h2", null, runs.length, " ", runs.length === 1 ? 'day' : 'days', " of getting better"), /*#__PURE__*/React.createElement("p", null, "It sees a similar pile of jobs every day. What changes is how well it knows you.")), /*#__PURE__*/React.createElement(Legend, null)), /*#__PURE__*/React.createElement(Charts, {
+    runs: runs,
+    costBasis: doc.cost_basis
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "axis-note"
+  }, /*#__PURE__*/React.createElement("span", null, "Day ", runs[0].day), /*#__PURE__*/React.createElement("span", null, "Day ", runs[runs.length - 1].day)));
 }
-
-function Shortlist({ roles }) {
-  return (
-    <section className="panel">
-      <div className="panel-head">
-        <div>
-          <h2>Today's shortlist</h2>
-          <p>It chose these on its own this morning. Everything it says about you comes from facts you confirmed yourself.</p>
-        </div>
-      </div>
-
-      {!roles.length && (
-        <div className="role"><p className="why" style={{ borderColor: 'var(--grid)' }}>
-          Nothing open right now — every role it has shown you has been answered.
-        </p></div>
-      )}
-
-      {roles.map(role => (
-        <article className="role" key={role.job_id}>
-          <div className="role-top">
-            <h3>{role.url ? <a href={role.url} style={{ color: 'inherit' }}>{role.title}</a> : role.title}</h3>
-            <span className="co">{role.company}</span>
-          </div>
-          {role.meta && <div className="role-meta">{role.meta}</div>}
-          <p className="why">{role.why}</p>
-          <div className="role-foot">
-            <span className={role.predicted === 'keep' ? 'pred keep' : 'pred skip'}>
-              {role.predicted === 'keep' ? 'Thinks you’ll want this' : 'Thinks you’ll pass'}
-              {role.score != null && ` · score ${role.score.toFixed(2)}`}
-            </span>
-            {!!(role.gaps || []).length && (
-              <span className="flag"><i />
-                They want {role.gaps.slice(0, 3).join(', ')} and you’ve never claimed
-                {role.gaps.length > 1 ? ' them' : ' it'}, so the application says so rather than bluffing
-              </span>
-            )}
-            {role.why_source === 'reconstructed' && (
-              <span className="flag" style={{ color: 'var(--ink-muted)' }}>
-                Rebuilt from the graph — the wording it showed you at the time was not stored
-              </span>
-            )}
-          </div>
-        </article>
-      ))}
-    </section>
-  );
+function Shortlist({
+  roles
+}) {
+  return /*#__PURE__*/React.createElement("section", {
+    className: "panel"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "panel-head"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h2", null, "Today's shortlist"), /*#__PURE__*/React.createElement("p", null, "It chose these on its own this morning. Everything it says about you comes from facts you confirmed yourself."))), !roles.length && /*#__PURE__*/React.createElement("div", {
+    className: "role"
+  }, /*#__PURE__*/React.createElement("p", {
+    className: "why",
+    style: {
+      borderColor: 'var(--grid)'
+    }
+  }, "Nothing open right now \u2014 every role it has shown you has been answered.")), roles.map(role => /*#__PURE__*/React.createElement("article", {
+    className: "role",
+    key: role.job_id
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "role-top"
+  }, /*#__PURE__*/React.createElement("h3", null, role.url ? /*#__PURE__*/React.createElement("a", {
+    href: role.url,
+    style: {
+      color: 'inherit'
+    }
+  }, role.title) : role.title), /*#__PURE__*/React.createElement("span", {
+    className: "co"
+  }, role.company)), role.meta && /*#__PURE__*/React.createElement("div", {
+    className: "role-meta"
+  }, role.meta), /*#__PURE__*/React.createElement("p", {
+    className: "why"
+  }, role.why), /*#__PURE__*/React.createElement("div", {
+    className: "role-foot"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: role.predicted === 'keep' ? 'pred keep' : 'pred skip'
+  }, role.predicted === 'keep' ? 'Thinks you’ll want this' : 'Thinks you’ll pass', role.score != null && ` · score ${role.score.toFixed(2)}`), !!(role.gaps || []).length && /*#__PURE__*/React.createElement("span", {
+    className: "flag"
+  }, /*#__PURE__*/React.createElement("i", null), "They want ", role.gaps.slice(0, 3).join(', '), " and you\u2019ve never claimed", role.gaps.length > 1 ? ' them' : ' it', ", so the application says so rather than bluffing"), role.why_source === 'reconstructed' && /*#__PURE__*/React.createElement("span", {
+    className: "flag",
+    style: {
+      color: 'var(--ink-muted)'
+    }
+  }, "Rebuilt from the graph \u2014 the wording it showed you at the time was not stored")))));
 }
-
-function Knowledge({ k }) {
+function Knowledge({
+  k
+}) {
   const r = k.readiness || {};
-  return (
-    <section className="panel">
-      <div className="panel-head">
-        <div>
-          <h2>What it knows about you</h2>
-          <p>All of this came from you. It never invents anything.</p>
-        </div>
-      </div>
-      <div className="know">
-        <div className="krow"><dt>Facts about your experience you’ve confirmed</dt><dd>{k.claims}</dd></div>
-        <div className="krow"><dt>Application answers it can reuse</dt><dd>{k.answers}</dd></div>
-        <div className="krow"><dt>Rules about your taste you’ve agreed to</dt><dd>{k.rules}</dd></div>
-        <div className="krow"><dt>Tasks it can now do from memory</dt><dd>{k.plays}</dd></div>
-        <div className="krow" style={{ display: 'block' }}>
-          <dt style={{ display: 'block' }}>The rules you agreed to</dt>
-          <p className="note">
-            {(k.rule_texts || []).length
-              ? k.rule_texts.join('. ') + '.'
-              : 'None yet — it proposes one once it has seen a pattern in what you turn down.'}
-          </p>
-        </div>
-        <div className="krow" style={{ display: 'block' }}>
-          <dt style={{ display: 'block' }}>Can it work out your preferences on its own yet?</dt>
-          {r.value == null ? (
-            <p className="note">Not enough answers yet to tell. It needs resolved predictions before it can measure itself.</p>
-          ) : (
-            <Fragment>
-              <p className="note">
-                {r.state === 'Autonomous'
-                  ? `Yes — you turned this on. You agreed with ${r.agreed} of its last ${r.window} calls.`
-                  : `${r.value >= (r.threshold || 0.8) ? 'Almost.' : 'Not yet.'} You agreed with ${r.agreed} of its last ${r.window} calls about your taste. It will ask your permission before it starts doing this without checking.`}
-              </p>
-              <div className="meter" role="img"
-                   aria-label={`${r.agreed} of its last ${r.window} guesses about your taste were right`}>
-                <i style={{ width: Math.round(r.value * 100) + '%' }} />
-              </div>
-            </Fragment>
-          )}
-        </div>
-      </div>
-    </section>
-  );
+  return /*#__PURE__*/React.createElement("section", {
+    className: "panel"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "panel-head"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h2", null, "What it knows about you"), /*#__PURE__*/React.createElement("p", null, "All of this came from you. It never invents anything."))), /*#__PURE__*/React.createElement("div", {
+    className: "know"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "krow"
+  }, /*#__PURE__*/React.createElement("dt", null, "Facts about your experience you\u2019ve confirmed"), /*#__PURE__*/React.createElement("dd", null, k.claims)), /*#__PURE__*/React.createElement("div", {
+    className: "krow"
+  }, /*#__PURE__*/React.createElement("dt", null, "Application answers it can reuse"), /*#__PURE__*/React.createElement("dd", null, k.answers)), /*#__PURE__*/React.createElement("div", {
+    className: "krow"
+  }, /*#__PURE__*/React.createElement("dt", null, "Rules about your taste you\u2019ve agreed to"), /*#__PURE__*/React.createElement("dd", null, k.rules)), /*#__PURE__*/React.createElement("div", {
+    className: "krow"
+  }, /*#__PURE__*/React.createElement("dt", null, "Tasks it can now do from memory"), /*#__PURE__*/React.createElement("dd", null, k.plays)), /*#__PURE__*/React.createElement("div", {
+    className: "krow",
+    style: {
+      display: 'block'
+    }
+  }, /*#__PURE__*/React.createElement("dt", {
+    style: {
+      display: 'block'
+    }
+  }, "The rules you agreed to"), /*#__PURE__*/React.createElement("p", {
+    className: "note"
+  }, (k.rule_texts || []).length ? k.rule_texts.join('. ') + '.' : 'None yet — it proposes one once it has seen a pattern in what you turn down.')), /*#__PURE__*/React.createElement("div", {
+    className: "krow",
+    style: {
+      display: 'block'
+    }
+  }, /*#__PURE__*/React.createElement("dt", {
+    style: {
+      display: 'block'
+    }
+  }, "Can it work out your preferences on its own yet?"), r.value == null ? /*#__PURE__*/React.createElement("p", {
+    className: "note"
+  }, "Not enough answers yet to tell. It needs resolved predictions before it can measure itself.") : /*#__PURE__*/React.createElement(Fragment, null, /*#__PURE__*/React.createElement("p", {
+    className: "note"
+  }, r.state === 'Autonomous' ? `Yes — you turned this on. You agreed with ${r.agreed} of its last ${r.window} calls.` : `${r.value >= (r.threshold || 0.8) ? 'Almost.' : 'Not yet.'} You agreed with ${r.agreed} of its last ${r.window} calls about your taste. It will ask your permission before it starts doing this without checking.`), /*#__PURE__*/React.createElement("div", {
+    className: "meter",
+    role: "img",
+    "aria-label": `${r.agreed} of its last ${r.window} guesses about your taste were right`
+  }, /*#__PURE__*/React.createElement("i", {
+    style: {
+      width: Math.round(r.value * 100) + '%'
+    }
+  }))))));
 }
-
-function RunLog({ runs, costBasis }) {
+function RunLog({
+  runs,
+  costBasis
+}) {
   const cost = COST_LABEL[costBasis];
   const costKey = costBasis === 'tool_calls' ? 'tool_calls' : 'tokens';
-  return (
-    <section className="panel">
-      <div className="panel-head">
-        <div>
-          <h2>Day by day</h2>
-          <p>One row per day, exactly as it happened. A dash is a number the run did not produce.</p>
-        </div>
-      </div>
-      <div className="tscroll"><table id="runlog">
-        <thead><tr>
-          <th>Day</th><th>How it worked</th>{cost && <th>{cost.col}</th>}<th>Time</th>
-          <th>Questions asked</th><th>Jobs you kept</th><th>Guessed right</th>
-        </tr></thead>
-        <tbody>
-          {runs.map(r => (
-            <tr key={r.day}>
-              <td className="n">{r.day}</td>
-              <td><span className="mode-cell"><i style={{ background: modeOf(r).color }} />{modeOf(r).label}</span></td>
-              {cost && <td className="n">{fmt(r[costKey])}</td>}
-              <td>{r.wall == null ? '—' : r.wall.toFixed(1) + 's'}</td>
-              <td className="n">{r.questions}</td>
-              <td>{r.kept == null || r.shown == null ? '—' : `${r.kept} of ${r.shown}`}</td>
-              <td className="n">{pct(r.acc)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table></div>
-    </section>
-  );
+  return /*#__PURE__*/React.createElement("section", {
+    className: "panel"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "panel-head"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h2", null, "Day by day"), /*#__PURE__*/React.createElement("p", null, "One row per day, exactly as it happened. A dash is a number the run did not produce."))), /*#__PURE__*/React.createElement("div", {
+    className: "tscroll"
+  }, /*#__PURE__*/React.createElement("table", {
+    id: "runlog"
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Day"), /*#__PURE__*/React.createElement("th", null, "How it worked"), cost && /*#__PURE__*/React.createElement("th", null, cost.col), /*#__PURE__*/React.createElement("th", null, "Time"), /*#__PURE__*/React.createElement("th", null, "Questions asked"), /*#__PURE__*/React.createElement("th", null, "Jobs you kept"), /*#__PURE__*/React.createElement("th", null, "Guessed right"))), /*#__PURE__*/React.createElement("tbody", null, runs.map(r => /*#__PURE__*/React.createElement("tr", {
+    key: r.day
+  }, /*#__PURE__*/React.createElement("td", {
+    className: "n"
+  }, r.day), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("span", {
+    className: "mode-cell"
+  }, /*#__PURE__*/React.createElement("i", {
+    style: {
+      background: modeOf(r).color
+    }
+  }), modeOf(r).label)), cost && /*#__PURE__*/React.createElement("td", {
+    className: "n"
+  }, fmt(r[costKey])), /*#__PURE__*/React.createElement("td", null, r.wall == null ? '—' : r.wall.toFixed(1) + 's'), /*#__PURE__*/React.createElement("td", {
+    className: "n"
+  }, r.questions), /*#__PURE__*/React.createElement("td", null, r.kept == null || r.shown == null ? '—' : `${r.kept} of ${r.shown}`), /*#__PURE__*/React.createElement("td", {
+    className: "n"
+  }, pct(r.acc))))))));
 }
-
 function App() {
   /* Starts on the sample, clearly flagged as one, and swaps to the feed when it
      arrives. There is no instant at which unlabelled sample data is on screen. */
   const [doc, setDoc] = useState(SAMPLE);
   const [error, setError] = useState('');
-
   useEffect(() => {
     const url = new URLSearchParams(location.search).get('data') || './data.json';
-    fetch(url, { cache: 'no-store' })
-      .then(res => res.ok ? res.json() : Promise.reject(new Error('HTTP ' + res.status)))
-      .then(data => { setDoc({ ...SAMPLE, ...data, live: true }); setError(''); })
-      .catch(err => setError(String(err.message || err)));
+    fetch(url, {
+      cache: 'no-store'
+    }).then(res => res.ok ? res.json() : Promise.reject(new Error('HTTP ' + res.status))).then(data => {
+      setDoc({
+        ...SAMPLE,
+        ...data,
+        live: true
+      });
+      setError('');
+    }).catch(err => setError(String(err.message || err)));
   }, []);
-
   const firstDay = doc.runs.length ? doc.runs[0].day : 1;
-  return (
-    <div className="wrap">
-      <Masthead doc={doc} />
-      <Stats stats={doc.stats} costBasis={doc.cost_basis} firstDay={firstDay} />
-      <TrendPanel doc={doc} />
-      <div className="cols">
-        <Shortlist roles={doc.shortlist || []} />
-        <Knowledge k={doc.knowledge || {}} />
-      </div>
-      <RunLog runs={doc.runs} costBasis={doc.cost_basis} />
-      <footer>
-        {doc.live ? (
-          <Fragment>
-            Live, from the <code>runs</code> and <code>applications</code> tables and the
-            candidate graph, built {doc.generated_at} by <code>demo/dashboard.py</code>.
-            A dash is a number the run did not produce — nothing here is interpolated or
-            back-filled.
-          </Fragment>
-        ) : (
-          <Fragment>
-            Showing the sample shipped with the interface — the feed at <code>./data.json</code>{' '}
-            could not be read{error && <Fragment> (<code>{error}</code>)</Fragment>}. Build it
-            with <code>make dashboard</code>, then serve this folder over http rather than
-            opening the file directly.
-          </Fragment>
-        )}
-      </footer>
-    </div>
-  );
+  return /*#__PURE__*/React.createElement("div", {
+    className: "wrap"
+  }, /*#__PURE__*/React.createElement(Masthead, {
+    doc: doc
+  }), /*#__PURE__*/React.createElement(Stats, {
+    stats: doc.stats,
+    costBasis: doc.cost_basis,
+    firstDay: firstDay
+  }), /*#__PURE__*/React.createElement(TrendPanel, {
+    doc: doc
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "cols"
+  }, /*#__PURE__*/React.createElement(Shortlist, {
+    roles: doc.shortlist || []
+  }), /*#__PURE__*/React.createElement(Knowledge, {
+    k: doc.knowledge || {}
+  })), /*#__PURE__*/React.createElement(RunLog, {
+    runs: doc.runs,
+    costBasis: doc.cost_basis
+  }), /*#__PURE__*/React.createElement("footer", null, doc.live ? /*#__PURE__*/React.createElement(Fragment, null, "Live, from the ", /*#__PURE__*/React.createElement("code", null, "runs"), " and ", /*#__PURE__*/React.createElement("code", null, "applications"), " tables and the candidate graph, built ", doc.generated_at, " by ", /*#__PURE__*/React.createElement("code", null, "demo/dashboard.py"), ". A dash is a number the run did not produce \u2014 nothing here is interpolated or back-filled.") : /*#__PURE__*/React.createElement(Fragment, null, "Showing the sample shipped with the interface \u2014 the feed at ", /*#__PURE__*/React.createElement("code", null, "./data.json"), ' ', "could not be read", error && /*#__PURE__*/React.createElement(Fragment, null, " (", /*#__PURE__*/React.createElement("code", null, error), ")"), ". Build it with ", /*#__PURE__*/React.createElement("code", null, "make dashboard"), ", then serve this folder over http rather than opening the file directly.")));
 }
-
 if (window.React && window.ReactDOM) {
-  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  ReactDOM.createRoot(document.getElementById('root')).render(/*#__PURE__*/React.createElement(App, null));
   window.__rendered = true;
 }
 </script>
 
-<!-- Plain JavaScript on purpose. The diagnostic cannot live in the block above:
-     that block is compiled by Babel, so if Babel is the script that failed — the
-     likeliest of the three, it is 2.9MB against react's 11KB — nothing in it
-     runs at all and the reader is left staring at "Loading the live figures…"
-     forever. This runs whatever loaded and whatever didn't. -->
 <script>
 window.addEventListener('load', function () {
   if (window.__rendered) return;
-  var missing = (window.__missing || []);
-  if (!missing.length && !window.Babel) missing = ['babel-standalone'];
-  document.getElementById('root').innerHTML =
-    '<div class="wrap"><div class="eyebrow">Muscle Memory</div>' +
-    '<p class="sub">This page could not load <code>' +
-    (missing.join(', ') || 'its JavaScript') +
-    '</code> from cdnjs.cloudflare.com, so the live figures cannot be drawn here. ' +
-    'The numbers themselves are fine and are not stored in this page: ' +
-    '<code>make dashboard</code> writes them to <code>dashboard/data.json</code> ' +
-    'whether or not the browser can reach a CDN.</p></div>';
+  document.getElementById('root').innerHTML = '<div class="wrap"><h1>the right job</h1><p>The dashboard could not load its local JavaScript. Serve the complete dashboard folder, including vendor/.</p></div>';
 });
 </script>
+</body>
+</html>
