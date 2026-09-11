@@ -131,8 +131,9 @@ class Preference:
         """The Slack question. Names the evidence, because that is what makes it
         checkable rather than a guess the human has to take on trust."""
         examples = ", ".join(self.evidence_jobs[:3])
+        named = f" ({examples})" if examples else ""
         return (f"I think you {self.rule.sentence()} — {self.evidence_count} "
-                f"not-for-mes in a row ({examples}). Confirm?")
+                f"not-for-mes in a row{named}. Confirm?")
 
 
 # --- induction -------------------------------------------------------------
@@ -191,7 +192,14 @@ def induce(signals: Sequence[Mapping[str, Any]], rejected_keys: Iterable[str] = 
 
 
 def _proposal(rule: Rule, group: Sequence[Mapping[str, Any]], explanation: str) -> Preference:
-    jobs = [f"{s.get('company') or '?'} {s.get('title') or ''}".strip() for s in group]
+    # A signal whose job no longer resolves is left out of the examples rather
+    # than rendered as "?". Naming the evidence is what makes the hypothesis
+    # checkable instead of something the human has to take on trust, and a "?"
+    # in that list spends the trust the naming was there to earn. The signal
+    # still counts toward evidence_count: the reason tag on it is real whether
+    # or not the posting is still in the graph.
+    jobs = [name for s in group
+            if (name := f"{s.get('company') or ''} {s.get('title') or ''}".strip())]
     return Preference(
         preference_id="pref-" + rule.key(), rule=rule, status="hypothesis",
         confidence=min(0.5 + 0.1 * len(group), 0.95), evidence_count=len(group),
