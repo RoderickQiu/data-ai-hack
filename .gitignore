@@ -4,3 +4,7 @@
 __pycache__/
 *.pyc
 data/job_snapshots/
+data/state/
+data/raw/
+data/*.parquet
+data/chart.html

@@ -122,6 +122,143 @@ Teammates get it with `rote registry play pull data-ai-hack/<play-name>`. Keep
 Plays private during the build; the final submission is published publicly under a
 personal handle at the end.
 
+## The backend
+
+The half of the build that is not fetching jobs and not the front end:
+canonical schema, day clock, the candidate graph, ranking and prediction, the
+apply-pack, the three pipelines, and the MCP server RocketRide reaches them
+through. `DESIGN.md` is the why; this is where it lives.
+
+```
+agent/      schema, day clock, ranking, predict_fit, apply-pack, metrics, the three pipelines
+memory/     cognee client + typed model, the candidate graph and its named queries,
+            claims + citation validator, the answer ladder, preference induction, autonomy
+insight/    hotdata client, the named SQL, the three tables, the corpus projection,
+            company headcounts (the one field no ATS board publishes)
+mcp_server/ FastMCP server and the Rote wrapper
+demo/       the timed loop driver and the three-line chart
+tests/      78 offline tests — no network, no credentials
+```
+
+### Getting it running
+
+```bash
+make test                                    # 78 tests, offline, well under a second
+python scripts/backend-setup.py --tables     # create applications + runs
+python scripts/backend-setup.py --project tech_jobs_release --dry-run   # show the mapping
+python scripts/backend-setup.py --project tech_jobs_release             # fill jobs_canonical
+python scripts/backend-setup.py --resume candidate/resume.md --prefs candidate/preferences.md
+python scripts/backend-setup.py --sync       # Cognee's typed graph -> the candidate graph
+make status                                  # what is in each layer right now
+```
+
+Then the server RocketRide talks to:
+
+```bash
+MCP_BEARER_TOKEN=$(python -c "import secrets;print(secrets.token_urlsafe(32))")  # into .env
+make serve       # http://127.0.0.1:8787/mcp
+make tunnel      # public URL for the staging pipeline; put the bearer in mcp_client
+```
+
+`make loop` ticks the day clock through the RocketRide webhook, which is what
+makes every point on the chart a real RocketRide run. `make loop-local` runs the
+same pass in process — the debugging harness from DESIGN §11, never the demo
+path. `make chart` builds `data/chart.html` from the `runs` table.
+
+### Where the two halves meet
+
+The fetchers own their table; the backend projects it into the canonical schema
+once, into **`jobs.public.jobs_canonical`**. `jobs` is left alone — that name
+belongs to whatever `scripts/hotdata-setup.sh` and the fetchers last wrote, in
+whatever shape the board returned.
+
+As of hour 0 the source is `jobs.public.tech_jobs_release`: 1,886 deduplicated
+rows across 19 companies and 3 ATS families, with a `release_day` already on
+every row. The projection maps `job_id` → `id`, picks one of the three URL
+columns, re-sanitizes the description, and **keeps the source's own schedule** —
+a play captured against day 7 has to replay against day 7, so a re-projection
+must never re-roll the days. A source with no `release_day` gets one assigned
+deterministically instead. Rename a column and re-run `--project`; nothing
+downstream changes. `HOTDATA_JOBS_TABLE` points the whole backend at a scratch
+copy if you want to try something without touching anything shared.
+
+### Things that cost an afternoon to find out
+
+All verified against the live services on 2026-09-11.
+
+- **HydraDB cloud has no Cypher.** `hydradb-sdk` 2.1.4 exposes
+  `context.ingest/list/relations/subgraph/inspect/delete` and nothing that takes
+  a query language. DESIGN §4 pre-decided the answer, so: the named queries are
+  written as Cypher, `memory/graph.py` evaluates them in process, and HydraDB
+  cloud is the durable store (nodes and edges go in as memory items, and pull
+  them back with `HydraMirror.pull`). Set `GRAPH_BOLT_URL` and the same queries
+  run as real Cypher against the OSS engine (`make graph-up`) — one env var, no
+  other change.
+- **hotdata's CLI is not uniform.** `databases load` and `search create` take no
+  `-o`; `search list` and `tables list` take no `-d` (it is `--database`);
+  `-o json` on a query returns `{columns, rows}`, not records; the percentile
+  function is `approx_percentile_cont`, not `approx_percentile`.
+- **A column's type is fixed by the first load, and an all-null column becomes
+  varchar.** The first real integer then fails with "can't change type from
+  varchar to int64" — hours later, when there is finally a number to write, and
+  `--mode replace` does not fix it because it replaces rows and not types. The
+  bootstrap rows that create `applications` and `runs` therefore carry a typed
+  value in every column (`RUNS_SEED` in `agent/schema.py`);
+  `--recreate-tables` drops and rebuilds if one is already wrong.
+- **A hotdata search index parses query syntax.** A bare `-`, `+`, `:`, `"`,
+  `(` or `^` anywhere in the text returns *500 internal server error*, so
+  pasting a résumé in fails in a way that reads like an outage.
+  `insight.hotdata.clean_query` strips them and every search goes through it.
+- **Cognee's `graphModel` works, and it must be nested.** Each schema *property*
+  becomes an edge from the object that owns it, so a flat root of parallel
+  arrays gives you a star with no candidate→skill edge. Also: cognify with a
+  graphModel took ~3 minutes for one paragraph against ~17s bare.
+- **`remember/entry` is stricter than the four shapes suggest**, and says why
+  only in the response body: `qa` needs `session_id`, `feedback` needs a `qa_id`,
+  `trace` needs `origin_function`, and `skill_run`'s `selected_skill_id` must be
+  the *name of a skill already registered* through `POST /api/v1/skills/` —
+  otherwise a bare 400 with nothing pointing at the cause. `memory/remember.py`
+  handles all four.
+- **`rote play search` answers in prose, not JSON**, including when piped.
+  Parsing it line-by-line turns "No registry Plays matched the query." into a
+  play that does not exist, and the agent then tries to replay it.
+
+### The one thing the corpus does not carry
+
+No ATS board publishes headcount, and the worked preference rule in DESIGN §6.3
+is about company size — the one `candidate/README.md` deliberately leaves out of
+the seed so the agent has to infer it. Without a size on the row that rule gets
+proposed, confirmed by the human, and then matches nothing, because
+`Rule.matches` returns false on an absent field: the shortlist does not move and
+P2 fails on stage *while looking like it worked*.
+
+So `insight/companies.py` is a nineteen-line lookup of approximate public
+headcounts, applied by the projection. It belongs in the same honesty column as
+the release schedule — the jobs are real, the headcounts are ours, and nothing
+on the chart depends on them being exact. Verified live: three not-for-mes on
+Anthropic, Palantir and Stripe propose *"you avoid roles with company size at
+least 2000"*, and confirming it moves the mean score of a big-company role from
+0.40 to 0.23 and puts Discord, Perplexity, Linear and Notion at the top.
+
+A test asserts that every field a rule can name is actually selected by the
+ranking queries, because that is what made the failure invisible the first time.
+
+### The rules the code enforces
+
+Four things from DESIGN that are checks in code rather than notes in a prompt,
+each with a test on it:
+
+- **Named queries only.** `hotdata_query(name, params)` and
+  `hydra_query(name, params)` over fixed registries; there is no free-text SQL
+  or Cypher tool and there will not be one.
+- **Only verified claims reach an apply-pack.** The tailoring call returns
+  `claim_id`s; `validate_citations` fails the pack if any citation is missing,
+  unverified, or another candidate's, or if a factual sentence carries none.
+- **A preference changes nothing until the human confirms it**, and a rejected
+  rule is never proposed again.
+- **Nothing is ever submitted anywhere**, at any autonomy level. Prepare, log,
+  hand to the human.
+
 ## Setup
 
 Requires Python 3.10 or newer. The old 3.14 ceiling is gone: the heavyweight

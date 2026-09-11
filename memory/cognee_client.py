@@ -17,6 +17,17 @@ someone an hour if rediscovered the hard way:
   you, pass ``datasetIds``.
 * Before the first ``cognify``, recall answers with
   ``{"status": "memory_warming_up"}`` rather than an error.
+* ``cognify`` with a ``graphModel`` is much slower than without: ~3 minutes for
+  one paragraph against ~17s bare. Budget for it; do it once per ingest, never
+  per run.
+* ``remember/entry`` is stricter than the four shapes suggest, and it reports
+  the reason only in the body — which is why ``_call`` raises with it attached:
+    - ``qa``       needs ``session_id``; the response carries an ``entry_id``.
+    - ``feedback`` needs ``qa_id`` — the id of the qa entry it is about.
+    - ``trace``    needs ``origin_function``.
+    - ``skill_run`` needs ``selected_skill_id`` to be **the name of a skill
+      already registered through POST /api/v1/skills/**. An unregistered name is
+      a bare 400 "Invalid remember request." with nothing pointing at the cause.
 
 Run it directly for a live round trip:  python memory/cognee_client.py
 """
@@ -86,7 +97,14 @@ class CogneeCloud:
 
     def _call(self, method: str, path: str, **kwargs: Any) -> Any:
         response = self._client.request(method, path, **kwargs)
-        response.raise_for_status()
+        if response.is_error:
+            # The tenant answers a rejected body with a bare status and the
+            # reason only in the payload ("Invalid remember request.", or a
+            # 422 naming the missing field). Raising without it costs an hour.
+            raise httpx.HTTPStatusError(
+                f"{response.status_code} on {method} {path}: {response.text[:400]}",
+                request=response.request, response=response,
+            )
         return response.json() if response.content else None
 
     # -- ingest ----------------------------------------------------------

@@ -35,36 +35,38 @@ def _tick(ok: bool, text: str) -> None:
     print(("  \033[32mok\033[0m   " if ok else "  \033[31mfail\033[0m ") + text)
 
 
-def ensure_tables(insight: Insight) -> None:
+def ensure_tables(insight: Insight, recreate: bool = False) -> None:
     """Create ``applications`` and ``runs`` by loading one seed row into each.
 
     hotdata declares a table on first load, so a zero-row table is not a thing
     that exists. The seed rows are marked ``run_id='bootstrap'`` and are
     harmless: every query that matters filters on an event or a real run.
+
+    The seeds carry a typed value in every column (see ``RUNS_SEED``). A column
+    seeded as null becomes varchar, and the first real run then fails to load
+    with "can't change type from varchar to int64" — which only shows up hours
+    later, when there is finally a number to write.
+
+    Pass ``recreate=True`` to rebuild a table whose columns got the wrong types.
     """
-    from agent.schema import APPLICATIONS_COLUMNS, RUNS_COLUMNS
+    from agent.schema import (APPLICATIONS_COLUMNS, APPLICATIONS_SEED,
+                              RUNS_COLUMNS, RUNS_SEED)
 
     # `tables list` reports the name under "table"; older builds used "name".
     existing = {t.get("table") or t.get("name") for t in insight.client.tables()}
-    if "applications" not in existing:
-        seed = {column: None for column in APPLICATIONS_COLUMNS}
-        seed.update({"id": "bootstrap", "job_id": "bootstrap", "event": "seen",
-                     "at": "1970-01-01T00:00:00+00:00", "day": 0, "run_id": "bootstrap"})
-        insight._load_rows("applications", [seed], APPLICATIONS_COLUMNS,
-                           mode="replace", key="id")
-        _tick(True, "created jobs.public.applications")
-    else:
-        _tick(True, "applications table already present")
-
-    if "runs" not in existing:
-        seed = {column: None for column in RUNS_COLUMNS}
-        seed.update({"run_id": "bootstrap", "started_at": "1970-01-01T00:00:00+00:00",
-                     "day": 0, "mode": "first_run", "wall_ms": 0, "tokens_in": 0,
-                     "tokens_out": 0, "questions_asked": 0, "human_touches": 0})
-        insight._load_rows("runs", [seed], RUNS_COLUMNS, mode="replace", key="run_id")
-        _tick(True, "created jobs.public.runs")
-    else:
-        _tick(True, "runs table already present")
+    for table, columns, seed in (("applications", APPLICATIONS_COLUMNS, APPLICATIONS_SEED),
+                                 ("runs", RUNS_COLUMNS, RUNS_SEED)):
+        if table in existing and not recreate:
+            _tick(True, f"{table} table already present")
+            continue
+        if table in existing:
+            # `replace` replaces rows, not column types. A column that was
+            # inferred as varchar stays varchar until the table is dropped.
+            insight.client.drop_table(table)
+        insight._load_rows(table, [seed], columns, mode="replace",
+                           key=columns[0])
+        _tick(True, f"{'recreated' if table in existing else 'created'} "
+                    f"{insight.client.catalog}.public.{table}")
 
 
 def ingest_candidate(store: GraphStore, resume: Path | None, prefs: Path | None) -> None:
@@ -134,6 +136,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--tables", action="store_true", help="create applications and runs")
+    parser.add_argument("--recreate-tables", action="store_true",
+                        help="rebuild applications and runs (drops the rows in them)")
     parser.add_argument("--resume", type=Path)
     parser.add_argument("--prefs", type=Path)
     parser.add_argument("--sync", action="store_true", help="Cognee graph -> candidate graph")
@@ -154,8 +158,10 @@ def main() -> None:
         insight = None
 
     did_something = False
-    if args.tables and insight:
-        print("\ntables"); ensure_tables(insight); did_something = True
+    if (args.tables or args.recreate_tables) and insight:
+        print("\ntables")
+        ensure_tables(insight, recreate=args.recreate_tables)
+        did_something = True
     if args.resume or args.prefs:
         print("\ncandidate memory"); ingest_candidate(store, args.resume, args.prefs)
         did_something = True

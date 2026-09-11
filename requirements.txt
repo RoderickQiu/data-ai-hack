@@ -11,3 +11,19 @@ httpx==0.28.1
 
 # HydraDB cloud client. The package is hydradb-sdk, the module is hydra_db.
 hydradb-sdk==2.1.4
+
+# The MCP server RocketRide's mcp_client connects to, over streamable HTTP
+# through a tunnel. stdio is not available to us: the engine runs on staging.
+fastmcp==4.0.3
+
+# The one model call in apply-pack. Qwen on an Alibaba Cloud MaaS workspace
+# endpoint, which is OpenAI-compatible — see QWEN_BASE_URL in .env.example.
+openai==2.54.0
+
+# Optional, and only used when GRAPH_BOLT_URL is set: the named graph queries
+# run as real Cypher against the HydraDB OSS engine instead of in process.
+# The cloud key has no query language (see README, "The backend").
+neo4j==6.3.0
+
+# Freezing the hour-0 corpus to parquet. Falls back to JSON if absent.
+pyarrow==25.0.1
