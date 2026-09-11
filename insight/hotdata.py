@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from agent.config import Settings, settings
+from agent.metrics import note_boundary_call
 
 
 class HotdataError(RuntimeError):
@@ -116,6 +117,11 @@ class Hotdata:
                 f"hotdata {' '.join(args[:2])} failed ({done.returncode}): "
                 f"{(done.stderr or done.stdout).strip()[:400]}"
             )
+        # Every call out of the process, counted for whichever run is open.
+        # This is the transport, so nothing can reach hotdata without passing
+        # here — which is the only way the cost line is a count rather than an
+        # estimate (agent/metrics.py:note_boundary_call).
+        note_boundary_call(len(done.stdout or ""))
         if not parse_json:
             return done.stdout
         try:

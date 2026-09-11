@@ -28,12 +28,46 @@ from __future__ import annotations
 
 import time
 import uuid
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Sequence
+from typing import Any, Iterator, Mapping, Sequence
 
 from agent.schema import RUNS_COLUMNS, now_iso
 
 MODES = ("first_run", "partial_replay", "full_replay")
+
+# Which run's row the boundary calls belong to, if any. A context variable
+# rather than an argument threaded through `refresh_and_rank`: the counting
+# happens at the transport (insight/hotdata.py), six call layers below the
+# thing that owns the row, and every layer between them would otherwise have to
+# carry a metrics object it does not use. Unset outside a run — a script, a
+# test or the dashboard build queries the same tables and must not be billed to
+# whichever run happens to be open.
+_ACCOUNTING: ContextVar["RunMetrics | None"] = ContextVar("run_metrics", default=None)
+
+
+@contextmanager
+def accounting_for(metrics: "RunMetrics") -> Iterator["RunMetrics"]:
+    """Bill every boundary call made inside this block to ``metrics``."""
+    token = _ACCOUNTING.set(metrics)
+    try:
+        yield metrics
+    finally:
+        _ACCOUNTING.reset(token)
+
+
+def note_boundary_call(returned_bytes: int = 0) -> None:
+    """One call out of the process. Called by the transport, no-op outside a run.
+
+    This is the proxy the module header promises: the orchestrator does not
+    report token usage, so cost is counted where the agent actually reaches out
+    of itself. It is a proxy and the dashboard says so — ``cost_basis`` is
+    ``tool_calls``, never ``tokens``, when this is the line being drawn.
+    """
+    metrics = _ACCOUNTING.get()
+    if metrics is not None:
+        metrics.note_tool_call(returned_bytes)
 
 
 @dataclass

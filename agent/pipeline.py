@@ -25,7 +25,7 @@ from typing import Any, Mapping, Sequence
 
 from agent.clock import DayClock
 from agent.digest import render_blocks, render_text
-from agent.metrics import RunMetrics
+from agent.metrics import RunMetrics, accounting_for
 from agent.pack import Pack, build_pack
 from agent.rank import RankResult, record_slate, refresh_and_rank
 from insight.store import Insight
@@ -152,9 +152,10 @@ def rank_day(pass_: DayPass, insight: Insight, store: GraphStore,
     compounding — and it is visible without a single new row.
     """
     metrics, day = pass_.metrics, pass_.day
-    result = refresh_and_rank(insight, store, day, title_like=title_like,
-                              location=location, remote_only=remote_only)
-    record_slate(store, result, metrics.run_id)
+    with accounting_for(metrics):
+        result = refresh_and_rank(insight, store, day, title_like=title_like,
+                                  location=location, remote_only=remote_only)
+        record_slate(store, result, metrics.run_id)
 
     rows = result.digest_rows()
     metrics.note_slate(result.pool_size, result.released_today, rows)
@@ -243,8 +244,9 @@ def prepare_pack(insight: Insight, store: GraphStore, job_id: str, day: int,
     else:
         metrics.note_reasoned(steps=4)
 
-    pack = build_pack(insight, store, job_id, screening_questions, day=day,
-                      metrics=metrics)
+    with accounting_for(metrics):
+        pack = build_pack(insight, store, job_id, screening_questions, day=day,
+                          metrics=metrics)
     metrics.values_replayed += len(match.known_fields)
 
     if match.mode == "none":
