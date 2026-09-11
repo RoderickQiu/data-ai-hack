@@ -148,6 +148,10 @@ class Preference:
 
 # --- induction -------------------------------------------------------------
 
+# The level memory.extract.seniority_of falls back to when no word in the
+# title matches. It means "unclassified", so it never induces a rule.
+_UNCLASSIFIED_LEVEL = "mid"
+
 _SENIOR_WORDS = ("staff", "principal", "director", "head of", "vp", "distinguished")
 _JUNIOR_WORDS = ("junior", "associate", "intern", "graduate", "entry level")
 
@@ -268,10 +272,23 @@ def _rule_for_level(group: Sequence[Mapping[str, Any]]) -> Rule | None:
     levelled = [str(s["seniority"]) for s in group if s.get("seniority")]
     if len(levelled) < len(group):
         return None
-    levels = set(levelled)
+    # "mid" is what memory.extract.seniority_of returns when it recognises no
+    # word in the title — the unclassified bucket, 45% of this corpus, not a
+    # level. A rejection that landed there says the classifier missed, not that
+    # the human dislikes mid-level work, and a rule including it penalised 63%
+    # of the corpus off three clicks.
+    classified = [level for level in levelled if level != _UNCLASSIFIED_LEVEL]
+    # The classified rejections must themselves clear the evidence threshold,
+    # the same bar _common_word holds titles to. Otherwise one genuinely senior
+    # rejection among two unclassifiable ones induces a rule that claims three
+    # not-for-mes and rests on one — seen live with "Senior Staff Applied AI
+    # Engineer", "Software Engineer - New Grad" and "Research Scientist".
+    if len(classified) < TUNABLES.pref_evidence_threshold:
+        return None
+    levels = set(classified)
     # Three rejections at three different levels is a span, not a pattern; past
     # that the "rule" would penalise most of the corpus on no real evidence.
-    if not levels or len(levels) > 3:
+    if len(levels) > 3:
         return None
     return Rule("seniority", "in", sorted(levels), "penalty", 0.6)
 
