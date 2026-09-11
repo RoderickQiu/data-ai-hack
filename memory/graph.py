@@ -723,14 +723,53 @@ class LocalBackend:
         with self._lock:
             dirty, self._dirty = self._dirty, []
         path = state_path(GRAPH_FILE)
-        path.write_text(json.dumps(self.graph.to_dict(), indent=1, default=str))
-        result: dict[str, Any] = {"local": str(path), "changed": len(dirty)}
+        merged = self._merge_onto_disk(path)
+        result: dict[str, Any] = {"local": str(path), "changed": len(dirty),
+                                  "merged_from_disk": merged}
         if self.mirror and dirty:
             self._push_async(dirty)
             if wait:
                 self.wait_for_mirror()
             result["hydradb"] = dict(self._last_push)
         return result
+
+    def _merge_onto_disk(self, path: Any) -> int:
+        """Write the graph by merging onto whatever is on disk, never over it.
+
+        This used to be ``write_text(self.graph.to_dict())`` — the whole
+        in-memory graph, stamped over the file. A process holds the snapshot it
+        loaded at start-up, so with two writers the later flush silently erased
+        everything the other had written. That is not theoretical: the MCP
+        server held a graph from 13:05 while the human answered in Slack, and
+        every Signal, REJECTED and resolved PREDICTED_KEEP went to hotdata and
+        vanished from the graph, which is where rule induction and the autonomy
+        record read from.
+
+        Disk first, ours on top: MERGE semantics mean a writer that only touched
+        a Claim cannot delete another's Signal, and re-asserting a node it
+        already has is a no-op. Written to a temp file and renamed so a reader
+        never sees a half-written graph.
+
+        Returns the node count read back off disk, so a caller can see that a
+        merge actually happened.
+        """
+        on_disk = 0
+        combined = Graph()
+        try:
+            if path.exists():
+                combined = Graph.from_dict(json.loads(path.read_text()))
+                on_disk = len(combined.nodes)
+        except (OSError, json.JSONDecodeError):
+            combined = Graph()  # unreadable: ours is better than nothing
+        for node in self.graph.nodes.values():
+            combined.merge_node(node.id, node.label, **node.props)
+        for edge in self.graph.edges.values():
+            combined.merge_edge(edge.src, edge.type, edge.dst, **edge.props)
+        self.graph = combined
+        tmp = path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(combined.to_dict(), indent=1, default=str))
+        tmp.replace(path)
+        return on_disk
 
     def _push_async(self, dirty: list[tuple[str, Any]]) -> None:
         def work() -> None:
@@ -845,9 +884,15 @@ HYDRA_BATCH_PAUSE = 0.2
 # item with the current shape, while the stale ones keep merging in harmlessly
 # (they carry no props, and `merge_node` only overwrites with values it has).
 #
-# Bump this whenever the *shape* of what goes in `metadata` changes. It is
+# Bump this whenever the *shape* of what goes in `metadata` changes — or when
+# `_item_id` changes how it derives one, which is the same problem wearing a
+# different hat: an id nobody can reproduce is an item nobody can upsert. It is
 # cheap: one full `--mirror` run.
-HYDRA_ITEM_SCHEMA = "v2"
+#
+# v3: `_item_id`'s digest moved from SHA-1 to SHA-256, so every over-cap id
+# changed. Without the bump those items would have orphaned quietly while the
+# short ones kept upserting, which is the confusing half-migration.
+HYDRA_ITEM_SCHEMA = "v3"
 
 
 def _props_for_metadata(props: Mapping[str, Any]) -> str:
@@ -878,7 +923,7 @@ def _item_id(natural: str) -> str:
     tagged = f"{HYDRA_ITEM_SCHEMA}:{natural}"
     if len(tagged.encode()) <= HYDRA_ID_MAX:
         return tagged
-    digest = hashlib.sha1(tagged.encode()).hexdigest()[:16]
+    digest = hashlib.sha256(tagged.encode()).hexdigest()[:16]
     head = tagged.encode()[: HYDRA_ID_MAX - len(digest) - 1].decode(errors="ignore")
     return f"{head}-{digest}"
 
