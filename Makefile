@@ -8,14 +8,15 @@ PY := .venv/bin/python
 PIP := .venv/bin/pip
 
 .DEFAULT_GOAL := help
-.PHONY: help setup test security verify status tables sync corpus serve tunnel pipes \
+.PHONY: help setup test security verify status tables sync pull corpus serve tunnel pipes \
 	pipeline-up pipeline-ask pipeline-down loop chart dashboard dashboard-serve \
 	graph-up graph-down clean
 
 help:  ## List the targets
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sed 's/:.*## /\t/' | expand -t22
 
-setup:  ## Install dependencies into .venv
+setup:  ## Create .venv if absent and install dependencies into it
+	test -x $(PIP) || python3 -m venv .venv
 	$(PIP) install --upgrade pip
 	$(PIP) install -r requirements.txt
 
@@ -37,6 +38,9 @@ tables:  ## Create the applications and runs tables (idempotent)
 
 sync:  ## Merge the Cognee graph into the candidate graph
 	$(PY) scripts/backend-setup.py --sync
+
+pull:  ## Restore the candidate graph from HydraDB. What a second laptop runs
+	$(PY) scripts/backend-setup.py --pull
 
 corpus:  ## Rebuild the frozen corpus from data/raw, offline
 	$(PY) scripts/backend-setup.py --corpus
