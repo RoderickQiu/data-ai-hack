@@ -21,23 +21,37 @@ def _host(value: str) -> str:
         raise ConfigError(str(exc)) from exc
 
 
+def _confine(path: Path, name: str) -> Path:
+    """Every path we take from the environment has to land inside the repo.
+    Without this a `../..` in SIGNAL_LOG or RESUME_DIR is a write primitive
+    anywhere the process can reach - CWE-23, and Snyk is right to flag it."""
+    resolved = path.expanduser().resolve()
+    if not resolved.is_relative_to(REPO_ROOT):
+        raise ConfigError(f"{name} must stay inside {REPO_ROOT}, got {resolved}")
+    return resolved
+
+
 def _resume_source() -> Path:
     """The markdown the PDF takes its structure from. A real resume.md wins
     over the committed example, which is what candidate/README.md tells people
     to do."""
     override = os.getenv("RESUME_SOURCE")
     if override:
-        return Path(override)
+        return _confine(_anchor(override), "RESUME_SOURCE")
     candidates = REPO_ROOT / "candidate"
     real = candidates / "resume.md"
     return real if real.exists() else candidates / "resume.example.md"
 
 
-def _resolve(value: str) -> Path:
+def _anchor(value: str) -> Path:
     """Relative paths hang off this folder, never the working directory - the
     repo root has its own data/ and the two must not collide."""
-    path = Path(value)
+    path = Path(value).expanduser()
     return path if path.is_absolute() else LOCAL_ROOT / path
+
+
+def _resolve(value: str, name: str) -> Path:
+    return _confine(_anchor(value), name)
 
 
 @dataclass(frozen=True)
@@ -82,8 +96,8 @@ def load_config() -> Config:
         api_host=_host(os.getenv("SLACK_API_HOST", "127.0.0.1")),
         api_port=int(os.getenv("SLACK_API_PORT", "8765")),
         api_token=os.getenv("SLACK_API_TOKEN", "dev-local-token"),
-        signal_log=_resolve(os.getenv("SIGNAL_LOG") or "data/signals.jsonl"),
-        resume_dir=_resolve(os.getenv("RESUME_DIR") or "data/resumes"),
+        signal_log=_resolve(os.getenv("SIGNAL_LOG") or "data/signals.jsonl", "SIGNAL_LOG"),
+        resume_dir=_resolve(os.getenv("RESUME_DIR") or "data/resumes", "RESUME_DIR"),
         resume_source=_resume_source(),
         signal_webhook=os.getenv("SIGNAL_WEBHOOK_URL"),
         signal_webhook_token=os.getenv("SIGNAL_WEBHOOK_TOKEN"),
