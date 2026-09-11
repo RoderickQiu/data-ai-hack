@@ -125,13 +125,19 @@ ROLE_RULES = [
     ("product_management", r"product (manager|management|lead)|head of product|director.{0,15}product"),
     ("design_research", r"designer|\bux\b|\bui\b|user research|design (engineer|technologist)"),
     ("technical_program", r"technical (program|project|product)|engineering program|\btpm\b"),
-    ("ai_ml_research", r"machine learning|\bml\b|\bai\b|research (scientist|engineer)|applied scientist|member of technical staff"),
+    ("ai_ml_research", r"machine learning|research (scientist|engineer)|applied scientist|"
+        r"\A(?=.*\b(engineer|scientist|research|developer|architect|infrastructure|platform|"
+        r"systems|learning|fellows?|alignment|safety|evals?|robotics|model|training|inference|"
+        r"analyst|intern)\b).*\b(ai|ml)\b"),
     ("data_analytics", r"\bdata\b|analytics|business intelligence|decision scientist|quantitative"),
     ("security", r"security|cyber|threat|detection engineer"),
     ("infrastructure", r"infrastructure|\bsre\b|site reliability|devops|cloud|network|systems engineer"),
     ("solutions_support", r"solutions? (engineer|architect)|sales engineer|support engineer|technical (support|account)|developer (advocate|relations)"),
     ("software_engineering", r"engineer|developer|software|architect"),
     ("technical_writing", r"technical writer|documentation engineer"),
+    # Last: an AI-lab "Member of Technical Staff" with no other signal is research; one that
+    # names a discipline ("... (Software Engineer, Backend)") is matched by that rule above.
+    ("ai_ml_research", r"member of technical staff"),
 ]
 
 
@@ -146,20 +152,61 @@ def role(title):
     return None
 
 
+REMOTE = re.compile(r"\bremote\b", re.I)
+
+# "U.S." never matched the old \b(...)\b group (a trailing "." is not a word boundary), and state
+# abbreviations were absent, so real US rows such as "Remote U.S." and "Honolulu, HI" fell out of
+# region. Abbreviations are matched case-sensitively: lowercased they collide with English words
+# ("or", "in", "me", "la", "hi").
 NORTH_AMERICA = re.compile(
-    r"\b(united states|usa|u\.s\.|us|canada|canadian|north america|americas|"
-    r"san francisco|bay area|new york|nyc|seattle|bellevue|redmond|boston|cambridge|"
+    r"\bu\.s\.?a?\.?|\b(united states|usa|us|canada|canadian|north america|americas|"
+    r"alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|"
+    r"hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|"
+    r"michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|"
+    r"new mexico|new york|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|"
+    r"rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|"
+    r"west virginia|wisconsin|wyoming|district of columbia|puerto rico|"
+    r"ontario|quebec|québec|british columbia|alberta|manitoba|saskatchewan|nova scotia|"
+    r"new brunswick|newfoundland|prince edward island|"
+    r"san francisco|bay area|nyc|seattle|bellevue|redmond|boston|cambridge|"
     r"austin|dallas|houston|denver|boulder|chicago|atlanta|los angeles|san diego|"
     r"san jose|sunnyvale|santa clara|palo alto|menlo park|mountain view|redwood city|"
-    r"washington|arlington|reston|mclean|pittsburgh|philadelphia|raleigh|durham|"
+    r"arlington|reston|mclean|pittsburgh|philadelphia|raleigh|durham|honolulu|"
     r"miami|orlando|tampa|phoenix|portland|salt lake|san mateo|foster city|irvine|"
-    r"oakland|toronto|vancouver|montreal|montréal|ottawa|waterloo|calgary|quebec|"
-    r"california|texas|massachusetts|virginia|colorado|illinois|ontario|british columbia)\b", re.I)
+    r"oakland|toronto|vancouver|montreal|montréal|ottawa|waterloo|calgary)\b", re.I)
+STATE_CODE = re.compile(
+    r"\b(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|"
+    r"NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC|PR|"
+    r"ON|QC|BC|AB|MB|SK|NS|NB|NL|PE)\b")
+
+
+def in_north_america(segment):
+    return bool(NORTH_AMERICA.search(segment) or STATE_CODE.search(segment))
+
+
+# Hiring seasons and start years are scheduling text, not part of what the role is. The demo
+# releases this corpus on its own day clock (see DESIGN.md §5), so a title that announces
+# "Winter 2027" contradicts the schedule on screen. `title_raw` keeps the board's wording.
+TITLE_TIME = [
+    re.compile(r"\s*[\(\[][^()\[\]]*\b(20\d\d|spring|summer|fall|autumn|winter|q[1-4])\b[^()\[\]]*[\)\]]", re.I),
+    re.compile(r"\s*[-–—,:]\s*\b(spring|summer|fall|autumn|winter)\b\s*(20\d\d)?\s*$", re.I),
+    re.compile(r"\s*\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+20\d\d\b", re.I),
+    re.compile(r"\s*\b20\d\d\b"),
+]
+
+
+def clean_title(title):
+    for pattern in TITLE_TIME:
+        title = pattern.sub("", title)
+    title = re.sub(r"\(\s*\)|\[\s*\]", "", title)
+    title = re.sub(r"\s+", " ", title).strip()
+    return re.sub(r"^[\s,:;\-–—]+|[\s,:;\-–—]+$", "", title)
 
 
 def normalize(job, source, fetched_at):
     ats, slug = source["ats"], source["slug"]
-    title = job.get("title") or job.get("text", "")
+    title_raw = job.get("title") or job.get("text", "")
+    title = clean_title(title_raw)
     category = role(title)
     if not category or job.get("isListed") is False:
         return None
@@ -176,12 +223,19 @@ def normalize(job, source, fetched_at):
     locations.extend(x.get("location", "") for x in job.get("secondaryLocations", []))
     locations.extend(categories.get("allLocations") or [categories.get("location", "")])
     location = "; ".join(dict.fromkeys(x for x in locations if x))
-    remote = job.get("isRemote") is True or (job.get("workplaceType") or "").lower() == "remote" or bool(re.search(r"\bremote\b", location, re.I))
+    segments = [x.strip() for x in location.split(";") if x.strip()]
+    # A "; "-joined multi-city string containing "Remote" anywhere does not make the job remote.
+    remote = (job.get("isRemote") is True or (job.get("workplaceType") or "").lower() == "remote"
+              or (bool(segments) and all(REMOTE.search(x) for x in segments)))
     countries = [job.get("country", ""), ((job.get("address") or {}).get("postalAddress") or {}).get("addressCountry", "")]
     countries.extend((x.get("address") or {}).get("addressCountry", "") for x in job.get("secondaryLocations", []))
-    in_region = any(str(c).upper() in ("US", "USA", "UNITED STATES", "CA", "CAN", "CANADA") for c in countries) or bool(NORTH_AMERICA.search(location))
-    if not (in_region or remote):
+    in_region = (any(str(c).upper() in ("US", "USA", "UNITED STATES", "CA", "CAN", "CANADA") for c in countries)
+                 or any(in_north_america(x) for x in segments))
+    if not in_region:
         return None
+    # Every surviving row has a North American location, so the old flag was constant. What is
+    # still worth carrying is whether the same req also lists offices outside the region.
+    region_match = "us_canada_location" if all(in_north_america(x) for x in segments) else "mixed_region_posting"
     description = job.get("descriptionPlain") or text(job.get("content") or job.get("descriptionHtml") or job.get("description"))
     if ats == "lever":
         description = "\n\n".join(filter(None, [job.get("openingPlain"), description,
@@ -200,8 +254,8 @@ def normalize(job, source, fetched_at):
         return None
     return dict(
         job_id=f"{ats}:{slug}:{source_id}", source_job_id=source_id,
-        company=source["company"], title=title, role_category=category,
-        location=location, remote=remote, region_match="us_canada_location" if in_region else "remote_location_restrictions_apply",
+        company=source["company"], title=title, title_raw=title_raw, role_category=category,
+        location=location, remote=remote, region_match=region_match,
         workplace_type=job.get("workplaceType") or ("remote" if remote else "unspecified"),
         department=job.get("department") or categories.get("department") or "; ".join(x["name"] for x in job.get("departments", [])),
         employment_type=job.get("employmentType") or categories.get("commitment"),
@@ -220,6 +274,10 @@ def normalize(job, source, fetched_at):
         collected_at=fetched_at, collected_date=fetched.astimezone(PACIFIC).date().isoformat(),
         date_timezone="America/Los_Angeles", status="open_at_collection",
         content_sha256=hashlib.sha256(description.encode()).hexdigest())
+
+
+BOOLEAN_FIELDS = ("remote", "published_today", "first_published_today")
+NUMERIC_FIELDS = ("salary_min", "salary_max", "release_day", "merged_count")
 
 
 def load_env():
@@ -252,7 +310,7 @@ def publish(rows, snapshot, table):
     if existing.get("rows"):
         raise RuntimeError("Table already exists; choose a fresh --table to preserve existing data")
     fields = list(rows[0])
-    columns = {key: "BOOLEAN" if key in ("remote", "published_today", "first_published_today") else "DOUBLE" if key in ("salary_min", "salary_max") else "VARCHAR" for key in fields}
+    columns = {key: "BOOLEAN" if key in BOOLEAN_FIELDS else "DOUBLE" if key in NUMERIC_FIELDS else "VARCHAR" for key in fields}
     def csv_line(values):
         out = io.StringIO(newline="")
         csv.writer(out).writerow(values)

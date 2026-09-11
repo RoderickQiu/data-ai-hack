@@ -30,9 +30,26 @@ class CollectorTests(unittest.TestCase):
 
     def test_remote_does_not_imply_worldwide_eligibility(self):
         self.assertIsNone(c.normalize(self.job(location="London"), self.source, self.fetched))
-        row = c.normalize(self.job(location="London", workplaceType="Remote"), self.source, self.fetched)
+        # A remote req scoped to London is outside US/Canada; "remote" must not readmit it.
+        self.assertIsNone(c.normalize(self.job(location="London", workplaceType="Remote"), self.source, self.fetched))
+        row = c.normalize(self.job(location="Remote U.S.", workplaceType="Remote"), self.source, self.fetched)
         self.assertTrue(row["remote"])
-        self.assertEqual(row["region_match"], "remote_location_restrictions_apply")
+        self.assertEqual(row["region_match"], "us_canada_location")
+
+    def test_remote_token_in_a_multi_city_list_is_not_a_remote_job(self):
+        row = c.normalize(self.job(location="In-Office; Austin, TX; Remote India"), self.source, self.fetched)
+        self.assertFalse(row["remote"])
+        self.assertEqual(row["region_match"], "mixed_region_posting")
+
+    def test_scheduling_text_is_stripped_from_titles(self):
+        row = c.normalize(self.job(title="Software Engineer Intern (Winter 2027)"), self.source, self.fetched)
+        self.assertEqual(row["title"], "Software Engineer Intern")
+        self.assertEqual(row["title_raw"], "Software Engineer Intern (Winter 2027)")
+
+    def test_member_of_technical_staff_keeps_the_discipline_it_names(self):
+        self.assertEqual(c.role("Member of Technical Staff (Software Engineer, Backend)"), "software_engineering")
+        self.assertEqual(c.role("Member of Technical Staff (Answer Quality & Evals)"), "ai_ml_research")
+        self.assertIsNone(c.role("Sales Manager, AI"))
 
     def test_lever_created_date_is_not_publication_date(self):
         source = dict(self.source, ats="lever")
