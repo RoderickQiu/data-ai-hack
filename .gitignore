@@ -1,6 +1,7 @@
 .rocketride/
 .env
 .venv/
+.venv-python39-backup/
 __pycache__/
 *.pyc
 data/job_snapshots/
@@ -22,3 +23,4 @@ dashboard/data.json
 # which the bare `.env` rule does not match.
 *.env
 .env.backup*
+.gitignore
