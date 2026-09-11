@@ -101,7 +101,10 @@ class Hotdata:
 
     def query(self, sql: str) -> list[dict[str, Any]]:
         """Run SQL and return records. Callers go through insight.queries."""
-        payload = self._run(["query", sql, "-o", "json"])
+        args = ["query", sql, "-o", "json"]
+        if self.config.hotdata_database:
+            args += ["-d", self.config.hotdata_database]
+        payload = self._run(args)
         return self.rows(payload)
 
     @staticmethod
