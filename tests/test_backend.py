@@ -676,24 +676,28 @@ class MigrationDiscardTests(unittest.TestCase):
         rows = [{"run_id": "run-real", "day": 7},
                 {"run_id": sorted(setup.DISCARD_RUN_IDS)[0], "day": 97},
                 {"run_id": "run-also-real", "day": 8}]
-        keep, drop = setup.discard_plan(rows, horizon=30)
+        keep, drop, suspicious = setup.discard_plan(rows, horizon=30)
         self.assertEqual([r["run_id"] for r in keep], ["run-real", "run-also-real"])
         self.assertEqual(len(drop), 1)
+        self.assertEqual(suspicious, [], "nothing kept is past the horizon")
 
     def test_an_unknown_row_past_the_horizon_is_reported_but_kept(self):
         """The horizon is a canary for junk nobody has noticed, not a delete
         rule — a migration must not invent rows to destroy."""
         setup = _backend_setup()
         rows = [{"run_id": "run-mystery", "day": 98}]
-        keep, drop = setup.discard_plan(rows, horizon=30)
+        keep, drop, suspicious = setup.discard_plan(rows, horizon=30)
         self.assertEqual(len(keep), 1, "kept, because nobody said to delete it")
         self.assertEqual(drop, [])
+        self.assertEqual([r["run_id"] for r in suspicious], ["run-mystery"],
+                         "reported to the caller, not printed from inside")
 
     def test_nothing_to_do_is_an_empty_plan(self):
         setup = _backend_setup()
-        keep, drop = setup.discard_plan([{"run_id": "run-real", "day": 3}], horizon=30)
+        keep, drop, suspicious = setup.discard_plan(
+            [{"run_id": "run-real", "day": 3}], horizon=30)
         self.assertEqual(len(keep), 1)
-        self.assertEqual(drop, [])
+        self.assertEqual((drop, suspicious), ([], []))
 
 
 class HydraMetadataTests(unittest.TestCase):

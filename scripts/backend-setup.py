@@ -85,23 +85,27 @@ DISCARD_RUN_IDS = frozenset({
 })
 
 
-def discard_plan(rows: Sequence[Mapping[str, Any]], horizon: int) -> tuple[list, list]:
-    """Split the dumped rows into (keep, drop), and flag anything suspicious.
+def discard_plan(rows: Sequence[Mapping[str, Any]],
+                 horizon: int) -> tuple[list, list, list]:
+    """Split the dumped rows into (keep, drop, suspicious). Prints nothing.
 
-    Returns the rows to restore and the rows to drop. A row whose ``day`` is
-    past the clock horizon cannot have come from ``DayClock.advance``, so it is
-    *reported* — but never dropped on that basis alone. The horizon is a canary
-    for junk nobody has noticed yet, not a deletion rule.
+    A row whose ``day`` is past the clock horizon cannot have come from
+    ``DayClock.advance``, so it comes back in ``suspicious`` — but it is never
+    dropped on that basis alone. The horizon is a canary for junk nobody has
+    noticed yet, not a deletion rule.
+
+    Deliberately pure. An earlier version printed the warning itself, and the
+    unit test covering the canary then emitted a line indistinguishable from a
+    live one — which sent another session hunting a phantom day-98 row that only
+    ever existed in a fixture. A function that reports by printing cannot be
+    tested without lying to whoever reads the output.
     """
     keep, drop = [], []
     for row in rows:
         (drop if row.get("run_id") in DISCARD_RUN_IDS else keep).append(row)
     suspicious = [row for row in keep
                   if isinstance(row.get("day"), int) and row["day"] > horizon]
-    for row in suspicious:
-        _tick(False, f"day {row['day']} is past the clock horizon of {horizon} "
-                     f"({row.get('run_id')}) — kept, but it will plot")
-    return keep, drop
+    return keep, drop, suspicious
 
 
 def migrate_runs(insight: Insight, dry_run: bool = True) -> dict:
@@ -126,9 +130,14 @@ def migrate_runs(insight: Insight, dry_run: bool = True) -> dict:
     rows = insight.run("runs_series", {"limit": 10000})
     present = set(rows[0]) if rows else set()
     missing = [column for column in RUNS_COLUMNS if column not in present]
-    keep, drop = discard_plan(rows, DayClock.load().horizon)
+    horizon = DayClock.load().horizon
+    keep, drop, suspicious = discard_plan(rows, horizon)
     report = {"rows": len(rows), "missing_columns": missing, "migrated": False,
-              "keep": len(keep), "drop": [r.get("run_id") for r in drop]}
+              "keep": len(keep), "drop": [r.get("run_id") for r in drop],
+              "suspicious": [r.get("run_id") for r in suspicious]}
+    for row in suspicious:
+        _tick(False, f"day {row['day']} is past the clock horizon of {horizon} "
+                     f"({row.get('run_id')}) — kept, but it will plot")
 
     # Both reasons to run, checked together. Checking only for missing columns
     # would strand the probe rows the moment someone else recreates the table:
