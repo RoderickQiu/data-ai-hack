@@ -219,6 +219,55 @@ def sync(store: GraphStore) -> None:
         _tick(False, f"sync failed: {str(exc)[:160]}")
 
 
+def restore(store: GraphStore) -> None:
+    """Pull the graph out of HydraDB and make it this machine's local graph.
+
+    ``--mirror`` already pulls, but only to compare: it throws the result away.
+    This is the half that was missing, and it is what a second laptop runs.
+    Without it a new machine starts blank — ``data/state/`` is gitignored and
+    ``GraphStore`` only ever loads the local file — so the resume ingest has to
+    be repeated and accumulated clicks never travel.
+
+    Merge rather than replace. HydraDB's ingest is asynchronous, so a pull can
+    legitimately come back short (882 -> 592 -> 352 was measured on one push),
+    and replacing would turn that into data loss on the machine that had the
+    rows. Merging means a second run converges instead of destroying, so
+    running this twice is always safe.
+    """
+    from memory.graph import GRAPH_FILE, HydraMirror, state_path
+
+    try:
+        hydra = HydraMirror(settings())
+    except Exception as exc:
+        _tick(False, f"HydraDB unavailable: {str(exc)[:160]}")
+        return
+    try:
+        remote = hydra.pull()
+    except Exception as exc:
+        _tick(False, f"pull failed: {str(exc)[:200]}")
+        return
+
+    graph = store.graph
+    before_nodes, before_edges = len(graph.nodes), len(graph.edges)
+    for node in remote.nodes.values():
+        graph.merge_node(node.id, node.label, **node.props)
+    for edge in remote.edges.values():
+        graph.merge_edge(edge.src, edge.type, edge.dst, **edge.props)
+
+    # Written straight to the local file rather than through store.flush(),
+    # which would mark every restored item dirty and push the whole graph back
+    # to the database it just came from.
+    path = state_path(GRAPH_FILE)
+    path.write_text(json.dumps(graph.to_dict(), indent=1, default=str))
+
+    _tick(True, f"pulled {len(remote.nodes)} node(s), {len(remote.edges)} edge(s); "
+                f"local graph {before_nodes}/{before_edges} -> "
+                f"{len(graph.nodes)}/{len(graph.edges)} node(s)/edge(s)")
+    if not remote.nodes:
+        print("  nothing in HydraDB yet — run the ingest, then `make mirror` "
+              "on the machine that has the data")
+
+
 def mirror(store: GraphStore) -> None:
     """Push the whole graph to HydraDB, then read it back and compare.
 
@@ -316,6 +365,8 @@ def main() -> None:
     parser.add_argument("--sync", action="store_true", help="Cognee graph -> candidate graph")
     parser.add_argument("--mirror", action="store_true",
                         help="push the whole graph to HydraDB, then pull it back and compare")
+    parser.add_argument("--pull", action="store_true",
+                        help="restore the candidate graph from HydraDB onto this machine")
     parser.add_argument("--corpus", action="store_true",
                         help="rebuild the corpus from data/raw (offline; replaces jobs)")
     parser.add_argument("--project", metavar="TABLE",
@@ -349,6 +400,8 @@ def main() -> None:
         print("\nsync"); sync(store); did_something = True
     if args.mirror:
         print("\nHydraDB mirror"); mirror(store); did_something = True
+    if args.pull:
+        print("\nrestore from HydraDB"); restore(store); did_something = True
     if args.corpus and insight:
         print("\ncorpus (offline, from data/raw)")
         batches = [{"source": source, "slug": slug, "company": slug, "items": items}
