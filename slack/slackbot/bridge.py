@@ -245,15 +245,24 @@ def apply_signal(signal: Mapping[str, Any], *, store, insight, remember=None,
         return {"kind": kind, **confirm_preference(
             store, preference_id, confirmed=kind == "confirm_preference")}
 
+    # grant, decline and verify_claim write to the graph but do not flush —
+    # unlike record_response, answer_question and confirm_preference, which all
+    # flush themselves. Without this the write lived only in the running bot's
+    # in-memory graph: the human clicked "Turn it on", the signal was recorded,
+    # and the domain was still Ready on disk.
     if kind in ("grant_autonomy", "defer_autonomy"):
         domain = payload.get("d") or payload.get("domain") or ""
         fn = grant if kind == "grant_autonomy" else decline
-        return {"kind": kind, **fn(store, domain)}
+        result = fn(store, domain)
+        store.flush()
+        return {"kind": kind, **result}
 
     if kind in ("verify_claim", "discard_claim"):
         claim_id = payload.get("cl") or payload.get("claim_id") or ""
         status = "verified" if kind == "verify_claim" else "retired"
-        return {"kind": kind, **verify_claim(store, claim_id, status=status)}
+        result = verify_claim(store, claim_id, status=status)
+        store.flush()
+        return {"kind": kind, **result}
 
     if kind == "report_reply":
         job_id = signal.get("job_id") or ""
