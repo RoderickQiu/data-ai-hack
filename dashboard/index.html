@@ -213,158 +213,15 @@
   }
 </style>
 
-<div class="wrap">
+<div id="root"></div>
 
-  <header class="masthead">
-    <div>
-      <div class="eyebrow">Your job search · day 20</div>
-      <h1>Muscle Memory</h1>
-      <p class="sub">An assistant that hunts for jobs on your behalf. The longer it runs, the cheaper it gets, the less it has to ask you, and the better it gets at knowing which jobs you actually want.</p>
-    </div>
-    <div class="masthead-meta">
-      <span class="chip sample">Example numbers, not live yet</span>
-      <span class="chip auto">Picking jobs without asking</span>
-      <span class="chip"><span class="dot" style="background:var(--full)"></span>Today it worked purely from memory</span>
-    </div>
-  </header>
+<script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.25.6/babel.min.js"></script>
 
-  <section class="stats" aria-label="Latest run against the first run">
-    <div class="stat">
-      <span class="label">Tokens used today</span>
-      <span class="value" id="s-tokens">1,180</span>
-      <span class="delta"><b>92% cheaper</b> than day 1</span>
-    </div>
-    <div class="stat">
-      <span class="label">Questions it asked</span>
-      <span class="value" id="s-questions">0</span>
-      <span class="delta">It asked you <b>6</b> on day 1</span>
-    </div>
-    <div class="stat">
-      <span class="label">Guessed your choice</span>
-      <span class="value" id="s-acc">90%</span>
-      <span class="delta">It was right <b>40%</b> of the time on day 1</span>
-    </div>
-    <div class="stat">
-      <span class="label">Times you stepped in</span>
-      <span class="value" id="s-touches">5</span>
-      <span class="delta">Down from <b>14</b> on day 1</span>
-    </div>
-  </section>
+<script type="text/babel" data-presets="react">
+const { useState, useRef, useLayoutEffect, Fragment } = React;
 
-  <section class="panel">
-    <div class="panel-head">
-      <div>
-        <h2>Twenty days of getting better</h2>
-        <p>It sees a similar pile of jobs every day. What changes is how well it knows you.</p>
-      </div>
-      <div class="legend" id="legend"></div>
-    </div>
-    <div class="charts" id="charts">
-      <div class="chart-row">
-        <div class="eyebrow">It costs less <span class="read">AI tokens spent each day</span></div>
-        <svg class="plot" id="plot-tokens" viewBox="0 0 1000 150" role="img" aria-label="Tokens used falling from 14,820 on day 1 to 1,180 on day 20, with one spike on day 12."></svg>
-      </div>
-      <div class="chart-row">
-        <div class="eyebrow">It needs you less <span class="read">questions it had to ask you</span></div>
-        <svg class="plot" id="plot-questions" viewBox="0 0 1000 116" role="img" aria-label="Questions it asked you falling from 6 on day 1 to none from day 13 onward."></svg>
-      </div>
-      <div class="chart-row">
-        <div class="eyebrow">It knows you better <span class="read">how often it correctly guessed your decision</span></div>
-        <svg class="plot" id="plot-acc" viewBox="0 0 1000 150" role="img" aria-label="How often it guessed your decision correctly, rising from 40 percent on day 1 to 90 percent on day 20."></svg>
-      </div>
-      <div class="tip" id="tip" aria-hidden="true"></div>
-    </div>
-    <div class="axis-note"><span>Day 1</span><span>Day 20</span></div>
-  </section>
-
-  <div class="cols">
-
-    <section class="panel">
-      <div class="panel-head">
-        <div>
-          <h2>Today's shortlist</h2>
-          <p>It chose these on its own this morning. Everything it says about you comes from facts you confirmed yourself.</p>
-        </div>
-      </div>
-
-      <article class="role">
-        <div class="role-top"><h3>Senior PM, Integrations</h3><span class="co">Linear</span></div>
-        <div class="role-meta">Remote (US/EU) · $190k–$230k · you can back up 4 of the 5 things they ask for</div>
-        <p class="why">Stripe replied to you about a similar job on day 6, and this company is under 2,000 people, which you told it you prefer.</p>
-        <div class="role-foot">
-          <span class="pred keep">Thinks you’ll want this · 88% sure</span>
-          <span class="flag"><i></i>They want Kubernetes and you’ve never claimed it, so the application says so rather than bluffing</span>
-        </div>
-      </article>
-
-      <article class="role">
-        <div class="role-top"><h3>Principal PM, Payments Infrastructure</h3><span class="co">Mercury</span></div>
-        <div class="role-meta">San Francisco · $235k–$280k · you can back up 5 of the 6 things they ask for</div>
-        <p class="why">You match nearly everything they ask for, but you turned down two jobs at this level for being too senior.</p>
-        <div class="role-foot">
-          <span class="pred skip">Thinks you’ll pass · 79% sure</span>
-        </div>
-      </article>
-
-      <article class="role">
-        <div class="role-top"><h3>Product Manager, Payroll</h3><span class="co">Deel</span></div>
-        <div class="role-meta">Remote (Global) · $160k–$195k</div>
-        <p class="why">The pay is in the bottom third for this job title, compared against 1,043 real job ads.</p>
-        <div class="role-foot">
-          <span class="pred skip">Thinks you’ll pass · 72% sure</span>
-          <span class="flag" style="color:var(--ink-muted)">Shown deliberately as a test — it needs jobs you might reject to check whether its guesses are any good</span>
-        </div>
-      </article>
-    </section>
-
-    <section class="panel">
-      <div class="panel-head">
-        <div>
-          <h2>What it knows about you</h2>
-          <p>All of this came from you. It never invents anything.</p>
-        </div>
-      </div>
-      <div class="know">
-        <div class="krow"><dt>Facts about your experience you’ve confirmed</dt><dd>24</dd></div>
-        <div class="krow"><dt>Application answers it can reuse</dt><dd>7</dd></div>
-        <div class="krow"><dt>Rules about your taste you’ve agreed to</dt><dd>3</dd></div>
-        <div class="krow"><dt>Tasks it can now do from memory</dt><dd>3</dd></div>
-        <div class="krow" style="display:block">
-          <dt style="display:block">The rules you agreed to</dt>
-          <p class="note">Companies under 2,000 people. Nothing at staff level or above. Remote, or within reach of Seattle.</p>
-        </div>
-        <div class="krow" style="display:block">
-          <dt style="display:block">Can it work out your preferences on its own yet?</dt>
-          <p class="note">Almost. You agreed with 4 of its last 5 guesses about your taste. It will ask your permission before it starts doing this without checking.</p>
-          <div class="meter" role="img" aria-label="4 of its last 5 guesses about your taste were right"><i style="width:80%"></i></div>
-        </div>
-      </div>
-    </section>
-
-  </div>
-
-  <section class="panel">
-    <div class="panel-head">
-      <div>
-        <h2>Day by day</h2>
-        <p>One row per day, exactly as it happened.</p>
-      </div>
-    </div>
-    <div class="tscroll"><table id="runlog">
-      <thead><tr>
-        <th>Day</th><th>How it worked</th><th>Tokens</th><th>Time</th><th>Questions asked</th><th>Jobs you kept</th><th>Guessed right</th>
-      </tr></thead>
-      <tbody></tbody>
-    </table></div>
-  </section>
-
-  <footer>
-    Every figure on this page is an example shipped with the interface, not a real job search. To make it live, replace the
-    <code>RUNS</code> array in the page source with a query against the <code>runs</code> table. Nothing else has to change.
-  </footer>
-</div>
-
-<script>
 const RUNS = [
   { run:1,  day:1,  mode:'first_run',      tokens:14820, wall:21.4, questions:6, shown:5, kept:2, acc:0.40, touches:14 },
   { run:2,  day:2,  mode:'first_run',      tokens:12140, wall:18.9, questions:5, shown:5, kept:2, acc:0.44, touches:12 },
@@ -395,189 +252,386 @@ const MODES = {
   full_replay:    { label: 'Pure memory',     hint: 'did the whole thing from memory', color: 'var(--full)' }
 };
 
-const NS = 'http://www.w3.org/2000/svg';
-const el = (n, a = {}) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); return e; };
 const fmt = n => n.toLocaleString('en-US');
 
 const L = 60, R = 948, LAST = RUNS.length;
 const xOf = i => L + (R - L) * (i / (LAST - 1));
 
-document.getElementById('legend').innerHTML = Object.values(MODES)
-  .map(m => `<span><i style="background:${m.color}"></i>${m.label} <span style="color:var(--ink-muted)">· ${m.hint}</span></span>`)
-  .join('');
-
-function frame(svg, bot, ticks, fmtTick) {
-  ticks.forEach(t => {
-    const y = t.y;
-    svg.appendChild(el('line', { x1: L, x2: R, y1: y, y2: y, stroke: 'var(--grid)', 'stroke-width': 1 }));
-    const label = el('text', { x: L - 13, y: y + 3.5, 'text-anchor': 'end' });
-    label.textContent = fmtTick(t.v);
-    svg.appendChild(label);
-  });
-  svg.appendChild(el('line', { x1: L, x2: R, y1: bot, y2: bot, stroke: 'var(--axis)', 'stroke-width': 1 }));
+/* ---- chart primitives ---- */
+function Frame({ bot, ticks, fmtTick }) {
+  return (
+    <Fragment>
+      {ticks.map(t => (
+        <Fragment key={t.v}>
+          <line x1={L} x2={R} y1={t.y} y2={t.y} stroke="var(--grid)" strokeWidth="1" />
+          <text x={L - 13} y={t.y + 3.5} textAnchor="end">{fmtTick(t.v)}</text>
+        </Fragment>
+      ))}
+      <line x1={L} x2={R} y1={bot} y2={bot} stroke="var(--axis)" strokeWidth="1" />
+    </Fragment>
+  );
 }
 
-function directLabel(svg, x, y, text, anchor = 'start') {
-  const t = el('text', { x, y, 'text-anchor': anchor, class: 'direct' });
-  t.textContent = text;
-  svg.appendChild(t);
+function DirectLabel({ x, y, anchor = 'start', children }) {
+  return <text x={x} y={y} textAnchor={anchor} className="direct">{children}</text>;
+}
+
+function Crosshair({ i, height }) {
+  return (
+    <line
+      x1={i == null ? 0 : xOf(i)} x2={i == null ? 0 : xOf(i)} y1={0} y2={height}
+      stroke="var(--ink-muted)" strokeWidth="1" strokeDasharray="3 3"
+      opacity={i == null ? 0 : 0.55}
+    />
+  );
 }
 
 /* ---- panel 1: tokens ---- */
-(function tokens() {
-  const svg = document.getElementById('plot-tokens');
+function TokensPlot({ hover }) {
   const top = 22, bot = 122, max = 16000;
   const y = v => bot - (v / max) * (bot - top);
-  frame(svg, bot, [16000, 8000, 0].map(v => ({ v, y: y(v) })), v => v ? (v / 1000) + 'k' : '0');
 
   const pts = RUNS.map((r, i) => [xOf(i), y(r.tokens)]);
   const line = pts.map(p => p.join(',')).join(' ');
-  svg.appendChild(el('polygon', {
-    points: `${L},${bot} ${line} ${R},${bot}`,
-    fill: 'var(--full)', opacity: 0.10
-  }));
-  svg.appendChild(el('polyline', {
-    points: line, fill: 'none', stroke: 'var(--ink-2)', 'stroke-width': 2,
-    'stroke-linejoin': 'round', 'stroke-linecap': 'round'
-  }));
-  RUNS.forEach((r, i) => {
-    svg.appendChild(el('circle', {
-      cx: xOf(i), cy: y(r.tokens), r: 4.5,
-      fill: MODES[r.mode].color, stroke: 'var(--surface)', 'stroke-width': 2
-    }));
-  });
-
-  directLabel(svg, L, y(RUNS[0].tokens) - 11, fmt(RUNS[0].tokens));
-  directLabel(svg, R + 10, y(RUNS[LAST - 1].tokens) + 4, fmt(RUNS[LAST - 1].tokens));
-
   const spike = RUNS.findIndex(r => r.note);
-  svg.appendChild(el('line', {
-    x1: xOf(spike), x2: xOf(spike), y1: y(RUNS[spike].tokens) - 9, y2: top - 6,
-    stroke: 'var(--axis)', 'stroke-width': 1, 'stroke-dasharray': '2 3'
-  }));
-  const ann = el('text', { x: xOf(spike) - 6, y: top - 10, 'text-anchor': 'end' });
-  ann.textContent = 'hit a question it had never seen';
-  svg.appendChild(ann);
-})();
+
+  return (
+    <svg className="plot" id="plot-tokens" viewBox="0 0 1000 150" role="img"
+         aria-label="Tokens used falling from 14,820 on day 1 to 1,180 on day 20, with one spike on day 12.">
+      <Frame bot={bot} ticks={[16000, 8000, 0].map(v => ({ v, y: y(v) }))}
+             fmtTick={v => v ? (v / 1000) + 'k' : '0'} />
+
+      <polygon points={`${L},${bot} ${line} ${R},${bot}`} fill="var(--full)" opacity="0.10" />
+      <polyline points={line} fill="none" stroke="var(--ink-2)" strokeWidth="2"
+                strokeLinejoin="round" strokeLinecap="round" />
+      {RUNS.map((r, i) => (
+        <circle key={r.run} cx={xOf(i)} cy={y(r.tokens)} r="4.5"
+                fill={MODES[r.mode].color} stroke="var(--surface)" strokeWidth="2" />
+      ))}
+
+      <DirectLabel x={L} y={y(RUNS[0].tokens) - 11}>{fmt(RUNS[0].tokens)}</DirectLabel>
+      <DirectLabel x={R + 10} y={y(RUNS[LAST - 1].tokens) + 4}>{fmt(RUNS[LAST - 1].tokens)}</DirectLabel>
+
+      <line x1={xOf(spike)} x2={xOf(spike)} y1={y(RUNS[spike].tokens) - 9} y2={top - 6}
+            stroke="var(--axis)" strokeWidth="1" strokeDasharray="2 3" />
+      <text x={xOf(spike) - 6} y={top - 10} textAnchor="end">hit a question it had never seen</text>
+
+      <Crosshair i={hover} height={150} />
+    </svg>
+  );
+}
 
 /* ---- panel 2: questions ---- */
-(function questions() {
-  const svg = document.getElementById('plot-questions');
+function QuestionsPlot({ hover }) {
   const top = 16, bot = 88, max = 6;
   const y = v => bot - (v / max) * (bot - top);
-  frame(svg, bot, [6, 3, 0].map(v => ({ v, y: y(v) })), v => String(v));
-
   const w = 16;
-  RUNS.forEach((r, i) => {
-    if (r.questions === 0) {
-      svg.appendChild(el('circle', { cx: xOf(i), cy: bot, r: 2.5, fill: 'var(--axis)' }));
-      return;
-    }
-    const h = bot - y(r.questions);
-    svg.appendChild(el('rect', {
-      x: xOf(i) - w / 2, y: y(r.questions), width: w, height: h,
-      rx: 4, ry: 4, fill: MODES[r.mode].color
-    }));
-    svg.appendChild(el('rect', {
-      x: xOf(i) - w / 2, y: bot - 5, width: w, height: 5, fill: MODES[r.mode].color
-    }));
-  });
 
-  directLabel(svg, L, y(6) - 9, 'asked you 6 things');
-  directLabel(svg, xOf(13) + 8, bot - 17, 'never had to ask again');
-})();
+  return (
+    <svg className="plot" id="plot-questions" viewBox="0 0 1000 116" role="img"
+         aria-label="Questions it asked you falling from 6 on day 1 to none from day 13 onward.">
+      <Frame bot={bot} ticks={[6, 3, 0].map(v => ({ v, y: y(v) }))} fmtTick={v => String(v)} />
+
+      {RUNS.map((r, i) => r.questions === 0 ? (
+        <circle key={r.run} cx={xOf(i)} cy={bot} r="2.5" fill="var(--axis)" />
+      ) : (
+        <Fragment key={r.run}>
+          <rect x={xOf(i) - w / 2} y={y(r.questions)} width={w} height={bot - y(r.questions)}
+                rx="4" ry="4" fill={MODES[r.mode].color} />
+          <rect x={xOf(i) - w / 2} y={bot - 5} width={w} height="5" fill={MODES[r.mode].color} />
+        </Fragment>
+      ))}
+
+      <DirectLabel x={L} y={y(6) - 9}>asked you 6 things</DirectLabel>
+      <DirectLabel x={xOf(13) + 8} y={bot - 17}>never had to ask again</DirectLabel>
+
+      <Crosshair i={hover} height={116} />
+    </svg>
+  );
+}
 
 /* ---- panel 3: accuracy ---- */
-(function accuracy() {
-  const svg = document.getElementById('plot-acc');
+function AccuracyPlot({ hover }) {
   const top = 22, bot = 122, lo = 0.3, hi = 1;
   const y = v => bot - ((v - lo) / (hi - lo)) * (bot - top);
-  frame(svg, bot, [1, 0.65, 0.3].map(v => ({ v, y: y(v) })), v => Math.round(v * 100) + '%');
-
   const pts = RUNS.map((r, i) => [xOf(i), y(r.acc)]);
-  svg.appendChild(el('polyline', {
-    points: pts.map(p => p.join(',')).join(' '), fill: 'none',
-    stroke: 'var(--ink-2)', 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round'
-  }));
-  RUNS.forEach((r, i) => {
-    svg.appendChild(el('circle', {
-      cx: xOf(i), cy: y(r.acc), r: 4.5,
-      fill: MODES[r.mode].color, stroke: 'var(--surface)', 'stroke-width': 2
-    }));
-  });
-  directLabel(svg, L, y(RUNS[0].acc) + 20, '40% — barely better than a coin flip');
-  directLabel(svg, R + 10, y(RUNS[LAST - 1].acc) + 4, '90%');
-})();
 
-/* ---- run log ---- */
-document.querySelector('#runlog tbody').innerHTML = RUNS.map(r => `
-  <tr>
-    <td class="n">${r.day}</td>
-    <td><span class="mode-cell"><i style="background:${MODES[r.mode].color}"></i>${MODES[r.mode].label}</span></td>
-    <td class="n">${fmt(r.tokens)}</td>
-    <td>${r.wall.toFixed(1)}s</td>
-    <td class="n">${r.questions}</td>
-    <td>${r.kept} of ${r.shown}</td>
-    <td class="n">${Math.round(r.acc * 100)}%</td>
-  </tr>`).join('');
+  return (
+    <svg className="plot" id="plot-acc" viewBox="0 0 1000 150" role="img"
+         aria-label="How often it guessed your decision correctly, rising from 40 percent on day 1 to 90 percent on day 20.">
+      <Frame bot={bot} ticks={[1, 0.65, 0.3].map(v => ({ v, y: y(v) }))}
+             fmtTick={v => Math.round(v * 100) + '%'} />
 
-/* ---- shared crosshair across all three panels ---- */
-(function hover() {
-  const host = document.getElementById('charts');
-  const tip = document.getElementById('tip');
-  const plots = [...document.querySelectorAll('svg.plot')];
+      <polyline points={pts.map(p => p.join(',')).join(' ')} fill="none"
+                stroke="var(--ink-2)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      {RUNS.map((r, i) => (
+        <circle key={r.run} cx={xOf(i)} cy={y(r.acc)} r="4.5"
+                fill={MODES[r.mode].color} stroke="var(--surface)" strokeWidth="2" />
+      ))}
 
-  const rules = plots.map(svg => {
-    const vb = svg.viewBox.baseVal;
-    const line = el('line', {
-      y1: 0, y2: vb.height, stroke: 'var(--ink-muted)', 'stroke-width': 1,
-      'stroke-dasharray': '3 3', opacity: 0
-    });
-    svg.appendChild(line);
-    return line;
-  });
+      <DirectLabel x={L} y={y(RUNS[0].acc) + 20}>40% — barely better than a coin flip</DirectLabel>
+      <DirectLabel x={R + 10} y={y(RUNS[LAST - 1].acc) + 4}>90%</DirectLabel>
 
-  function show(i, clientX, clientY) {
-    const r = RUNS[i], m = MODES[r.mode];
-    rules.forEach(line => {
-      line.setAttribute('x1', xOf(i));
-      line.setAttribute('x2', xOf(i));
-      line.setAttribute('opacity', 0.55);
-    });
-    tip.innerHTML = `
-      <div class="t-run">DAY ${r.day}</div>
-      <div class="t-mode"><i style="background:${m.color}"></i>${m.label}</div>
+      <Crosshair i={hover} height={150} />
+    </svg>
+  );
+}
+
+/* ---- tooltip ---- */
+function Tip({ hover, tipRef }) {
+  if (hover == null) return <div className="tip" id="tip" ref={tipRef} data-on="0" aria-hidden="true" />;
+  const r = RUNS[hover], m = MODES[r.mode];
+  return (
+    <div className="tip" id="tip" ref={tipRef} data-on="1" aria-hidden="true">
+      <div className="t-run">DAY {r.day}</div>
+      <div className="t-mode"><i style={{ background: m.color }} />{m.label}</div>
       <dl>
-        <dt>Tokens used</dt><dd>${fmt(r.tokens)}</dd>
-        <dt>Time taken</dt><dd>${r.wall.toFixed(1)}s</dd>
-        <dt>Questions asked</dt><dd>${r.questions}</dd>
-        <dt>Guessed right</dt><dd>${Math.round(r.acc * 100)}%</dd>
-        <dt>Times you stepped in</dt><dd>${r.touches}</dd>
+        <dt>Tokens used</dt><dd>{fmt(r.tokens)}</dd>
+        <dt>Time taken</dt><dd>{r.wall.toFixed(1)}s</dd>
+        <dt>Questions asked</dt><dd>{r.questions}</dd>
+        <dt>Guessed right</dt><dd>{Math.round(r.acc * 100)}%</dd>
+        <dt>Times you stepped in</dt><dd>{r.touches}</dd>
       </dl>
-      ${r.note ? `<p style="margin:8px 0 0;font-size:12px;color:var(--ink-2);max-width:210px">${r.note}</p>` : ''}`;
-    tip.dataset.on = '1';
+      {r.note && <p style={{ margin: '8px 0 0', fontSize: '12px', color: 'var(--ink-2)', maxWidth: '210px' }}>{r.note}</p>}
+    </div>
+  );
+}
+
+/* ---- the three charts with a shared crosshair ---- */
+function Charts() {
+  const [hover, setHover] = useState(null);
+  const [at, setAt] = useState(null);
+  const hostRef = useRef(null);
+  const tipRef = useRef(null);
+
+  useLayoutEffect(() => {
+    const tip = tipRef.current, host = hostRef.current;
+    if (!tip || !host || hover == null || !at) return;
     const hostBox = host.getBoundingClientRect();
-    const x = Math.max(100, Math.min(hostBox.width - 100, clientX - hostBox.left));
+    const x = Math.max(100, Math.min(hostBox.width - 100, at.clientX - hostBox.left));
     const tipH = tip.offsetHeight || 170;
-    const y = Math.max(8, Math.min(hostBox.height - tipH - 8, clientY - hostBox.top + 18));
+    const y = Math.max(8, Math.min(hostBox.height - tipH - 8, at.clientY - hostBox.top + 18));
     tip.style.left = x + 'px';
     tip.style.top = y + 'px';
-  }
+  }, [hover, at]);
 
-  function hide() {
-    rules.forEach(line => line.setAttribute('opacity', 0));
-    tip.dataset.on = '0';
-  }
-
-  host.addEventListener('pointermove', ev => {
-    const plot = ev.target.closest('svg.plot') || plots[0];
+  function onMove(ev) {
+    const host = hostRef.current;
+    const plot = ev.target.closest('svg.plot') || host.querySelector('svg.plot');
     const box = plot.getBoundingClientRect();
     const vb = plot.viewBox.baseVal.width;
     const vx = ((ev.clientX - box.left) / box.width) * vb;
-    if (vx < L - 20 || vx > R + 20) return hide();
+    if (vx < L - 20 || vx > R + 20) { setHover(null); return; }
     const i = Math.round(((vx - L) / (R - L)) * (LAST - 1));
-    show(Math.max(0, Math.min(LAST - 1, i)), ev.clientX, ev.clientY);
-  });
-  host.addEventListener('pointerleave', hide);
-})();
+    setHover(Math.max(0, Math.min(LAST - 1, i)));
+    setAt({ clientX: ev.clientX, clientY: ev.clientY });
+  }
+
+  return (
+    <div className="charts" id="charts" ref={hostRef} onPointerMove={onMove} onPointerLeave={() => setHover(null)}>
+      <div className="chart-row">
+        <div className="eyebrow">It costs less <span className="read">AI tokens spent each day</span></div>
+        <TokensPlot hover={hover} />
+      </div>
+      <div className="chart-row">
+        <div className="eyebrow">It needs you less <span className="read">questions it had to ask you</span></div>
+        <QuestionsPlot hover={hover} />
+      </div>
+      <div className="chart-row">
+        <div className="eyebrow">It knows you better <span className="read">how often it correctly guessed your decision</span></div>
+        <AccuracyPlot hover={hover} />
+      </div>
+      <Tip hover={hover} tipRef={tipRef} />
+    </div>
+  );
+}
+
+/* ---- page sections ---- */
+function Masthead() {
+  return (
+    <header className="masthead">
+      <div>
+        <div className="eyebrow">Your job search · day 20</div>
+        <h1>Muscle Memory</h1>
+        <p className="sub">An assistant that hunts for jobs on your behalf. The longer it runs, the cheaper it gets, the less it has to ask you, and the better it gets at knowing which jobs you actually want.</p>
+      </div>
+      <div className="masthead-meta">
+        <span className="chip sample">Example numbers, not live yet</span>
+        <span className="chip auto">Picking jobs without asking</span>
+        <span className="chip"><span className="dot" style={{ background: 'var(--full)' }} />Today it worked purely from memory</span>
+      </div>
+    </header>
+  );
+}
+
+function Stat({ id, label, value, children }) {
+  return (
+    <div className="stat">
+      <span className="label">{label}</span>
+      <span className="value" id={id}>{value}</span>
+      <span className="delta">{children}</span>
+    </div>
+  );
+}
+
+function Stats() {
+  return (
+    <section className="stats" aria-label="Latest run against the first run">
+      <Stat id="s-tokens" label="Tokens used today" value="1,180"><b>92% cheaper</b> than day 1</Stat>
+      <Stat id="s-questions" label="Questions it asked" value="0">It asked you <b>6</b> on day 1</Stat>
+      <Stat id="s-acc" label="Guessed your choice" value="90%">It was right <b>40%</b> of the time on day 1</Stat>
+      <Stat id="s-touches" label="Times you stepped in" value="5">Down from <b>14</b> on day 1</Stat>
+    </section>
+  );
+}
+
+function Legend() {
+  return (
+    <div className="legend" id="legend">
+      {Object.entries(MODES).map(([key, m]) => (
+        <span key={key}>
+          <i style={{ background: m.color }} />{m.label} <span style={{ color: 'var(--ink-muted)' }}>· {m.hint}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function TrendPanel() {
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h2>Twenty days of getting better</h2>
+          <p>It sees a similar pile of jobs every day. What changes is how well it knows you.</p>
+        </div>
+        <Legend />
+      </div>
+      <Charts />
+      <div className="axis-note"><span>Day 1</span><span>Day 20</span></div>
+    </section>
+  );
+}
+
+function Shortlist() {
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h2>Today's shortlist</h2>
+          <p>It chose these on its own this morning. Everything it says about you comes from facts you confirmed yourself.</p>
+        </div>
+      </div>
+
+      <article className="role">
+        <div className="role-top"><h3>Senior PM, Integrations</h3><span className="co">Linear</span></div>
+        <div className="role-meta">Remote (US/EU) · $190k–$230k · you can back up 4 of the 5 things they ask for</div>
+        <p className="why">Stripe replied to you about a similar job on day 6, and this company is under 2,000 people, which you told it you prefer.</p>
+        <div className="role-foot">
+          <span className="pred keep">Thinks you’ll want this · 88% sure</span>
+          <span className="flag"><i />They want Kubernetes and you’ve never claimed it, so the application says so rather than bluffing</span>
+        </div>
+      </article>
+
+      <article className="role">
+        <div className="role-top"><h3>Principal PM, Payments Infrastructure</h3><span className="co">Mercury</span></div>
+        <div className="role-meta">San Francisco · $235k–$280k · you can back up 5 of the 6 things they ask for</div>
+        <p className="why">You match nearly everything they ask for, but you turned down two jobs at this level for being too senior.</p>
+        <div className="role-foot">
+          <span className="pred skip">Thinks you’ll pass · 79% sure</span>
+        </div>
+      </article>
+
+      <article className="role">
+        <div className="role-top"><h3>Product Manager, Payroll</h3><span className="co">Deel</span></div>
+        <div className="role-meta">Remote (Global) · $160k–$195k</div>
+        <p className="why">The pay is in the bottom third for this job title, compared against 1,043 real job ads.</p>
+        <div className="role-foot">
+          <span className="pred skip">Thinks you’ll pass · 72% sure</span>
+          <span className="flag" style={{ color: 'var(--ink-muted)' }}>Shown deliberately as a test — it needs jobs you might reject to check whether its guesses are any good</span>
+        </div>
+      </article>
+    </section>
+  );
+}
+
+function Knowledge() {
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h2>What it knows about you</h2>
+          <p>All of this came from you. It never invents anything.</p>
+        </div>
+      </div>
+      <div className="know">
+        <div className="krow"><dt>Facts about your experience you’ve confirmed</dt><dd>24</dd></div>
+        <div className="krow"><dt>Application answers it can reuse</dt><dd>7</dd></div>
+        <div className="krow"><dt>Rules about your taste you’ve agreed to</dt><dd>3</dd></div>
+        <div className="krow"><dt>Tasks it can now do from memory</dt><dd>3</dd></div>
+        <div className="krow" style={{ display: 'block' }}>
+          <dt style={{ display: 'block' }}>The rules you agreed to</dt>
+          <p className="note">Companies under 2,000 people. Nothing at staff level or above. Remote, or within reach of Seattle.</p>
+        </div>
+        <div className="krow" style={{ display: 'block' }}>
+          <dt style={{ display: 'block' }}>Can it work out your preferences on its own yet?</dt>
+          <p className="note">Almost. You agreed with 4 of its last 5 guesses about your taste. It will ask your permission before it starts doing this without checking.</p>
+          <div className="meter" role="img" aria-label="4 of its last 5 guesses about your taste were right"><i style={{ width: '80%' }} /></div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function RunLog() {
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h2>Day by day</h2>
+          <p>One row per day, exactly as it happened.</p>
+        </div>
+      </div>
+      <div className="tscroll"><table id="runlog">
+        <thead><tr>
+          <th>Day</th><th>How it worked</th><th>Tokens</th><th>Time</th><th>Questions asked</th><th>Jobs you kept</th><th>Guessed right</th>
+        </tr></thead>
+        <tbody>
+          {RUNS.map(r => (
+            <tr key={r.run}>
+              <td className="n">{r.day}</td>
+              <td><span className="mode-cell"><i style={{ background: MODES[r.mode].color }} />{MODES[r.mode].label}</span></td>
+              <td className="n">{fmt(r.tokens)}</td>
+              <td>{r.wall.toFixed(1)}s</td>
+              <td className="n">{r.questions}</td>
+              <td>{r.kept} of {r.shown}</td>
+              <td className="n">{Math.round(r.acc * 100)}%</td>
+            </tr>
+          ))}
+        </tbody>
+      </table></div>
+    </section>
+  );
+}
+
+function App() {
+  return (
+    <div className="wrap">
+      <Masthead />
+      <Stats />
+      <TrendPanel />
+      <div className="cols">
+        <Shortlist />
+        <Knowledge />
+      </div>
+      <RunLog />
+      <footer>
+        Every figure on this page is an example shipped with the interface, not a real job search. To make it live, replace the{' '}
+        <code>RUNS</code> array in the page source with a query against the <code>runs</code> table. Nothing else has to change.
+      </footer>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
 </script>
