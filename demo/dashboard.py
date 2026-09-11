@@ -244,6 +244,15 @@ def headline(points: Sequence[Mapping[str, Any]], basis: str) -> dict[str, Any]:
     cost_key = "tokens" if basis == "tokens" else "tool_calls"
 
     def pct_drop(a: Any, b: Any) -> int | None:
+        """None unless both ends are real numbers.
+
+        _num coerces None to 0.0, so a missing latest value used to read as a
+        100% saving: 4,961 tokens down to "no data" was rendered as cost falling
+        to zero. "No data" and "free" are different facts, the same way §7 has
+        "no data" and "got them all wrong" as different facts.
+        """
+        if a is None or b is None:
+            return None
         a, b = _num(a), _num(b)
         return round((a - b) / a * 100) if a else None
 
