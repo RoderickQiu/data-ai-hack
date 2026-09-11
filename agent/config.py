@@ -66,8 +66,8 @@ class Tunables:
     # Two of every five shown roles are drawn from outside the top ranking, to
     # hold slate difficulty fixed so prediction_accuracy cannot drift up just
     # because the slate got uniformly good (DESIGN §7).
-    slate_size: int = 5
-    slate_off_ranking: int = 2
+    slate_size: int = 10
+    slate_off_ranking: int = 4
     narrow_top_k: int = 30
 
     # Preference induction (DESIGN §6.3).

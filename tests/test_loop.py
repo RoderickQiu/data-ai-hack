@@ -170,9 +170,12 @@ class LoopTests(unittest.TestCase):
 
     # --
 
-    def test_a_pass_produces_a_five_role_slate_with_reasons(self):
+    def test_a_pass_produces_a_full_slate_with_reasons(self):
         result = self.judge()
-        self.assertEqual(len(result.slate), TUNABLES.slate_size)
+        # A slate cannot be larger than the pool it is drawn from, and this
+        # fixture is smaller than slate_size.
+        self.assertEqual(len(result.slate),
+                         min(TUNABLES.slate_size, result.pool_size))
         self.assertTrue(all(row["why"] for row in result.digest_rows()))
         self.assertTrue(any(p.coverage > 0 for p in result.slate),
                         "requirements should have been extracted from the descriptions")
