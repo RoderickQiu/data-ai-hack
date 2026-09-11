@@ -96,7 +96,17 @@ class Rule:
             "contains": "mentioning", "not_contains": "not mentioning",
         }[self.op]
         direction = "prefer" if self.effect == "boost" else "avoid"
-        return f"{direction} roles with {self.field.replace('_', ' ')} {phrasing} {self.value}"
+        # A list value reaches a human in the Confirm prompt, so it is spelled
+        # out rather than printed as a Python repr: "manager or staff", not
+        # "['manager', 'staff']". Applies to the industry and location rules
+        # too, which have always carried lists.
+        if isinstance(self.value, (list, tuple)):
+            items = [str(v) for v in self.value]
+            value = " or ".join(items) if len(items) < 3 else \
+                ", ".join(items[:-1]) + f" or {items[-1]}"
+        else:
+            value = self.value
+        return f"{direction} roles with {self.field.replace('_', ' ')} {phrasing} {value}"
 
 
 def _lower(value: Any) -> Any:
@@ -210,10 +220,12 @@ def _proposal(rule: Rule, group: Sequence[Mapping[str, Any]], explanation: str) 
 def _rule_for_tag(tag: str, group: Sequence[Mapping[str, Any]]) -> Rule | None:
     if tag == "too_senior":
         word = _common_word(group, _SENIOR_WORDS)
-        return Rule("title", "contains", word, "penalty", 0.6) if word else None
+        return (Rule("title", "contains", word, "penalty", 0.6) if word
+                else _rule_for_level(group))
     if tag == "too_junior":
         word = _common_word(group, _JUNIOR_WORDS)
-        return Rule("title", "contains", word, "penalty", 0.6) if word else None
+        return (Rule("title", "contains", word, "penalty", 0.6) if word
+                else _rule_for_level(group))
     if tag == "company_too_large":
         sizes = _numbers(group, "company_size")
         cutoff = _round_size(min(sizes)) if sizes else 2000
@@ -234,6 +246,34 @@ def _rule_for_tag(tag: str, group: Sequence[Mapping[str, Any]]) -> Rule | None:
             return None
         return Rule("salary_max", "lt", _round_size(max(salaries)), "penalty", 0.5)
     return None
+
+
+def _rule_for_level(group: Sequence[Mapping[str, Any]]) -> Rule | None:
+    """Fall back to the ``seniority`` column when the titles share no word.
+
+    "Too senior" spans staff, manager, director and VP — words that by
+    definition do not co-occur, so :func:`_common_word` finds nothing in the
+    one case the chip is most often used for. Three rejections reading
+    *Member of Technical Staff*, *Manager, Billing* and *Sr. Manager,
+    Platform* have no common title word and induced no rule at all, which is
+    the persona's stated preference — "senior individual-contributor, not a
+    management track" — going unlearned.
+
+    ``seniority`` is a corpus column and was already in ``FIELDS``; nothing
+    else needed changing to apply or explain a rule keyed on it.
+
+    Every signal in the group has to carry a level, so a rule is never induced
+    from the two rows that happened to have the column filled in.
+    """
+    levelled = [str(s["seniority"]) for s in group if s.get("seniority")]
+    if len(levelled) < len(group):
+        return None
+    levels = set(levelled)
+    # Three rejections at three different levels is a span, not a pattern; past
+    # that the "rule" would penalise most of the corpus on no real evidence.
+    if not levels or len(levels) > 3:
+        return None
+    return Rule("seniority", "in", sorted(levels), "penalty", 0.6)
 
 
 def _rule_for_attribute(attribute: str, group: Sequence[Mapping[str, Any]]) -> Rule | None:
