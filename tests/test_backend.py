@@ -14,7 +14,7 @@ import unittest
 
 from agent.clock import DayClock, assign_release_days, release_histogram
 from agent.config import TUNABLES
-from agent.metrics import RunMetrics, skip_class_accuracy
+from agent.metrics import RunMetrics, prediction_accuracy
 from agent.predict import predict, requirement_coverage
 from agent.digest import parse_reply, tags_from_text
 from agent.rank import build_slate
@@ -450,13 +450,29 @@ class SlateTests(unittest.TestCase):
 
 
 class MetricsTests(unittest.TestCase):
-    def test_skip_class_accuracy_ignores_easy_keeps(self):
+    def test_accuracy_is_balanced_across_the_classes(self):
+        # Four easy keeps and one missed skip. Plain accuracy would call this
+        # 80%; recalling every keep and no skip averages to 50%.
         responses = [{"predicted": "keep", "actual": "keep"}] * 4 + [
             {"predicted": "keep", "actual": "skip"}]
-        self.assertEqual(skip_class_accuracy(responses), 0.0)
+        self.assertEqual(prediction_accuracy(responses), 0.5)
 
-    def test_no_skips_reports_none_not_zero(self):
-        self.assertIsNone(skip_class_accuracy([{"predicted": "keep", "actual": "keep"}]))
+    def test_the_base_rate_cannot_inflate_it(self):
+        # An agent that guesses the majority class and nothing else.
+        lazy = ([{"predicted": "skip", "actual": "skip"}] * 8
+                + [{"predicted": "skip", "actual": "keep"}] * 2)
+        self.assertEqual(prediction_accuracy(lazy), 0.5)
+
+    def test_a_one_sided_day_is_not_total_failure(self):
+        # The human kept everything; one call was right. That is 9%, not 0% —
+        # the measure this replaced excluded the correct keep as an easy win
+        # and scored the day on the wrong skips alone.
+        day = ([{"predicted": "skip", "actual": "keep"}] * 10
+               + [{"predicted": "keep", "actual": "keep"}])
+        self.assertEqual(prediction_accuracy(day), 0.0909)
+
+    def test_nothing_resolved_reports_none_not_zero(self):
+        self.assertIsNone(prediction_accuracy([{"predicted": "keep", "actual": None}]))
 
     def test_mode_is_derived_from_what_happened(self):
         metrics = RunMetrics(day=1)

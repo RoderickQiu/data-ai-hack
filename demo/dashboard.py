@@ -37,7 +37,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from agent.clock import DayClock
 from agent.config import ROOT, TUNABLES
-from agent.metrics import skip_class_accuracy
+from agent.metrics import prediction_accuracy
 from agent.schema import is_usage_row, now_iso
 from insight.store import Insight
 from memory.autonomy import D1_SHORTLIST, DOMAINS, state_of
@@ -112,7 +112,7 @@ def quality_by_day(insight: Insight, limit: int = 2000) -> dict[int, dict[str, A
             "kept": sum(1 for row in group if row.get("actual") == "keep"),
             # None when the slate produced no skips. "No data" and "got them all
             # wrong" are different facts and only one belongs on a chart.
-            "accuracy": skip_class_accuracy(group),
+            "accuracy": prediction_accuracy(group),
         }
         for day, group in by_day.items()
     }

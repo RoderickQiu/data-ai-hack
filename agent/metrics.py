@@ -177,7 +177,7 @@ class RunMetrics:
             return {}
         self.actual_keep = sum(1 for r in answered if r["actual"] == "keep")
         self.precision_at_5 = round(self.actual_keep / len(answered), 4)
-        self.prediction_accuracy = skip_class_accuracy(answered)
+        self.prediction_accuracy = prediction_accuracy(answered)
         self.human_touches += len(answered)
         return {"precision_at_5": self.precision_at_5,
                 "prediction_accuracy": self.prediction_accuracy}
@@ -212,18 +212,34 @@ class RunMetrics:
         return round(self.steps_replayed / total, 3) if total else 0.0
 
 
-def skip_class_accuracy(responses: Sequence[Mapping[str, Any]]) -> float | None:
-    """How often the agent called a *skip* correctly.
+def prediction_accuracy(responses: Sequence[Mapping[str, Any]]) -> float | None:
+    """How well the agent called it, averaged over the classes it had to call.
 
-    Measured across all five shown roles the number is dishonest: as ranking
-    improves the slate becomes uniformly good and "keep" turns trivially
-    predictable. Reported on the skip class, and ``None`` — never 0.0 — when the
-    slate produced no skips at all, because "no data" and "got them all wrong"
-    are different facts and only one of them belongs on a chart.
+    Balanced accuracy: recall within each class the human actually used, then
+    the mean of those. Two properties matter and no simpler measure has both.
+
+    **The base rate cannot inflate it.** Plain accuracy rewards guessing the
+    majority: the human skips 77% of the time in this build, so an agent
+    predicting skip on everything scores 78% while knowing nothing. Averaging
+    per-class recall gives that agent 50% — it recalls every skip and no keep.
+
+    **A one-sided day is not scored as total failure.** The measure this
+    replaces counted any row where either side said skip, so a day the human
+    kept everything scored 0% on the strength of ten wrong skip predictions,
+    while the single keep it got right was excluded as an easy win. One correct
+    call in eleven is 9%, not nothing, and that gap is the difference between
+    "it was wrong here" and "it is broken".
+
+    ``None`` when nothing resolved: no data and got-them-all-wrong are
+    different facts, and only one of them belongs on a chart.
     """
-    relevant = [r for r in responses
-                if r.get("predicted") == "skip" or r.get("actual") == "skip"]
-    if not relevant:
+    by_actual: dict[str, list[bool]] = {}
+    for row in responses:
+        predicted, actual = row.get("predicted"), row.get("actual")
+        if not predicted or not actual:
+            continue
+        by_actual.setdefault(actual, []).append(predicted == actual)
+    if not by_actual:
         return None
-    correct = sum(1 for r in relevant if r.get("predicted") == r.get("actual"))
-    return round(correct / len(relevant), 4)
+    recalls = [sum(hits) / len(hits) for hits in by_actual.values()]
+    return round(sum(recalls) / len(recalls), 4)

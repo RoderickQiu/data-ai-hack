@@ -141,7 +141,7 @@ def update_run_metrics(insight, run_id: str) -> dict[str, Any]:
     clicks arrive one at a time and the answer to "how good was this slate" is
     only meaningful over the whole slate.
     """
-    from agent.metrics import skip_class_accuracy
+    from agent.metrics import prediction_accuracy
 
     rows = [r for r in insight.run("runs_series", {"limit": 500})
             if r.get("run_id") == run_id]
@@ -154,7 +154,7 @@ def update_run_metrics(insight, run_id: str) -> dict[str, Any]:
     keeps = sum(1 for r in answered if r["actual"] == "keep")
     row["actual_keep"] = keeps
     row["precision_at_5"] = round(keeps / len(answered), 4)
-    row["prediction_accuracy"] = skip_class_accuracy(answered)
+    row["prediction_accuracy"] = prediction_accuracy(answered)
     row["human_touches"] = len(answered)
     insight.log_run(row)
     return {"run_id": run_id, "answered": len(answered),

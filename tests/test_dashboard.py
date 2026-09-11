@@ -144,15 +144,34 @@ class HonestyTest(unittest.TestCase):
 
         quality = quality_by_day(insight)
         self.assertEqual(quality[1]["kept"], 2)
-        # Skip class only: j1 and j2 are relevant, one of them is right.
-        self.assertEqual(quality[1]["accuracy"], 0.5)
+        # Balanced across the classes the human used: the one skip was recalled
+        # (1.0), one of the two keeps was (0.5), so 0.75.
+        self.assertEqual(quality[1]["accuracy"], 0.75)
 
-    def test_a_slate_with_no_skips_reports_no_accuracy_rather_than_zero(self):
+    def test_a_one_sided_slate_is_scored_on_the_class_it_had(self):
+        """A day the human answered one way is scored on that class, not
+        discarded and not zeroed.
+
+        This asserted None while accuracy was skip-class only, on the grounds
+        that a slate with no skips says nothing about discrimination. True of
+        one easy call; false of the day the human kept eleven roles and the
+        agent had called ten of them skip. That day scored 0% — the ten wrong
+        calls counted and the one right one was excluded as an easy win — which
+        read as "broken" rather than "wrong here". Balanced accuracy scores the
+        class that was used: 9% there, 100% on the single correct call below.
+        """
         insight = FakeInsight()
         insight.run = lambda name, params=None: [
             {"job_id": "j1", "predicted": "keep", "actual": "keep", "day": 1},
         ] if name == "predictions_window" else []
-        self.assertIsNone(quality_by_day(insight)[1]["accuracy"])
+        self.assertEqual(quality_by_day(insight)[1]["accuracy"], 1.0)
+
+        insight.run = lambda name, params=None: ([
+            {"job_id": f"j{i}", "predicted": "skip", "actual": "keep", "day": 2}
+            for i in range(10)] + [
+            {"job_id": "j10", "predicted": "keep", "actual": "keep", "day": 2}]
+        ) if name == "predictions_window" else []
+        self.assertEqual(quality_by_day(insight)[2]["accuracy"], 0.0909)
 
     def test_a_day_nobody_counted_is_a_gap_not_a_free_day(self):
         """One failed usage poll must not become the best point on the cost chart."""
