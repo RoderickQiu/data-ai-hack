@@ -831,6 +831,24 @@ HYDRA_PAGE_MAX = 100
 HYDRA_BATCH_ITEMS = 50
 HYDRA_BATCH_PAUSE = 0.2
 
+# A memory item's metadata is write-once on this tenant, and that is not
+# something the API says anywhere. Measured on 2026-09-11, three results:
+#
+# * a *new* id ingests with its metadata and pulls back complete, within ~40s;
+# * `upsert="true"` on an *existing* id returns success and leaves the stored
+#   metadata exactly as it was — the new props are accepted and discarded;
+# * `context.delete` then re-ingesting the same id leaves the item gone. The id
+#   is tombstoned, so delete-and-rewrite is not a repair, it is a deletion.
+#
+# So the items written before the props fix cannot be corrected in place. The
+# id carries a schema version instead: bump it and every item re-lands as a new
+# item with the current shape, while the stale ones keep merging in harmlessly
+# (they carry no props, and `merge_node` only overwrites with values it has).
+#
+# Bump this whenever the *shape* of what goes in `metadata` changes. It is
+# cheap: one full `--mirror` run.
+HYDRA_ITEM_SCHEMA = "v2"
+
 
 def _props_for_metadata(props: Mapping[str, Any]) -> str:
     """The props as they have to travel to survive the round trip.
@@ -852,12 +870,16 @@ def _props_for_metadata(props: Mapping[str, Any]) -> str:
 
 
 def _item_id(natural: str) -> str:
-    """The natural id when it fits, otherwise a truncation plus a digest of the
-    whole thing — still stable, so a re-push upserts rather than duplicating."""
-    if len(natural.encode()) <= HYDRA_ID_MAX:
-        return natural
-    digest = hashlib.sha1(natural.encode()).hexdigest()[:16]
-    head = natural.encode()[: HYDRA_ID_MAX - len(digest) - 1].decode(errors="ignore")
+    """The id an item is stored under: schema version, then the natural id.
+
+    Truncated with a digest when the result would pass the 100-byte cap — still
+    deterministic, so a re-push lands on the same item rather than duplicating.
+    """
+    tagged = f"{HYDRA_ITEM_SCHEMA}:{natural}"
+    if len(tagged.encode()) <= HYDRA_ID_MAX:
+        return tagged
+    digest = hashlib.sha1(tagged.encode()).hexdigest()[:16]
+    head = tagged.encode()[: HYDRA_ID_MAX - len(digest) - 1].decode(errors="ignore")
     return f"{head}-{digest}"
 
 
