@@ -205,10 +205,13 @@ def cost_basis(points: Sequence[Mapping[str, Any]]) -> str:
     hides the panel rather than drawing a flat line at zero, because a flat line
     at zero looks like a measurement and is not one.
     """
-    if any(_int(p.get("tokens")) for p in points):
-        return "tokens"
-    if any(_int(p.get("tool_calls")) for p in points):
-        return "tool_calls"
+    # Two days, or it is not a line. One day with a number and eleven without
+    # draws a spike out of an empty panel and captions it a percentage change
+    # against nothing — which is how a single afternoon's packs came to read as
+    # "176% more expensive than day 1".
+    for basis in ("tokens", "tool_calls"):
+        if sum(1 for p in points if _int(p.get(basis))) >= 2:
+            return basis
     return "unavailable"
 
 

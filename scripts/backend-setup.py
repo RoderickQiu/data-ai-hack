@@ -82,6 +82,35 @@ def ensure_tables(insight: Insight, recreate: bool = False) -> None:
 DISCARD_RUN_IDS = frozenset({
     "run-c9b14489f3",   # day 97, probe row
     "run-9402281cf0",   # day 99, probe row
+
+    # 2026-09-11 22:08–22:17. Runs made while wiring the tool-call counter and
+    # then backfilling a pack onto each of days 1–8, to fill a cost line that
+    # had no data. They are real runs that really made those calls, but they
+    # are not part of the story: the packs were prepared against a memory
+    # already warmed by the three before them, so the day they are stamped with
+    # is not the day whose cost they describe. Every one of them is the only
+    # row in the table carrying a non-zero `tool_calls`, which is what made
+    # them identifiable.
+    "run-6268bbd249",   # day 16, P-A
+    "run-72496e0cb1",   # day 16, P-B
+    "run-48752eeead",   # day 16, P-B
+    "run-a9129b8557",   # day 16, P-B
+    "run-ee64afe5ad",   # day 1, P-A
+    "run-5655d65f83",   # day 1, P-B
+    "run-c4459b4adf",   # day 2, P-A
+    "run-d23e74bc3c",   # day 2, P-B
+    "run-cec1bc6d97",   # day 3, P-A
+    "run-f077eb5362",   # day 3, P-B
+    "run-8c66b7a1b5",   # day 4, P-A
+    "run-605804c181",   # day 4, P-B
+    "run-9d3618ae46",   # day 5, P-A
+    "run-40651a0458",   # day 5, P-B
+    "run-9010c40282",   # day 6, P-A
+    "run-124081e670",   # day 6, P-B
+    "run-025c65124e",   # day 7, P-A
+    "run-db381322d7",   # day 7, P-B
+    "run-9bf750b848",   # day 8, P-A
+    "run-942628d413",   # day 8, P-B
 })
 
 

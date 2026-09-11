@@ -749,22 +749,24 @@ function CostPlot({
 /* ---- panel 2: questions ---- */
 function QuestionsPlot({
   runs,
-  hover
+  hover,
+  field = 'questions',
+  verb = 'asked you'
 }) {
   const n = runs.length,
     top = 16,
     bot = 88;
-  const max = Math.max(1, ...runs.map(r => r.questions || 0));
+  const max = Math.max(1, ...runs.map(r => r[field] || 0));
   const y = v => bot - v / max * (bot - top);
   const xf = i => xOf(i, n);
   const w = Math.max(3, Math.min(16, (R - L) / Math.max(n, 1) * 0.6));
-  const firstQuiet = runs.findIndex((r, i) => !r.questions && runs.slice(i).every(x => !x.questions));
+  const firstQuiet = runs.findIndex((r, i) => !r[field] && runs.slice(i).every(x => !x.questions));
   return /*#__PURE__*/React.createElement("svg", {
     className: "plot",
     id: "plot-questions",
     viewBox: "0 0 1000 116",
     role: "img",
-    "aria-label": `Questions it asked you, from ${runs[0].questions} on day ${runs[0].day} onward.`
+    "aria-label": `${field === "questions" ? "Questions it asked you" : "Times you stepped in"}, from ${runs[0][field]} on day ${runs[0].day} onward.`
   }, /*#__PURE__*/React.createElement(Frame, {
     bot: bot,
     ticks: [max, max / 2, 0].map(v => ({
@@ -772,7 +774,7 @@ function QuestionsPlot({
       y: y(v)
     })),
     fmtTick: v => String(Math.round(v))
-  }), runs.map((r, i) => !r.questions ? /*#__PURE__*/React.createElement("circle", {
+  }), runs.map((r, i) => !r[field] ? /*#__PURE__*/React.createElement("circle", {
     key: r.day,
     cx: xf(i),
     cy: bot,
@@ -782,9 +784,9 @@ function QuestionsPlot({
     key: r.day
   }, /*#__PURE__*/React.createElement("rect", {
     x: xf(i) - w / 2,
-    y: y(r.questions),
+    y: y(r[field]),
     width: w,
-    height: bot - y(r.questions),
+    height: bot - y(r[field]),
     rx: "4",
     ry: "4",
     fill: modeOf(r).color
@@ -794,13 +796,13 @@ function QuestionsPlot({
     width: w,
     height: "5",
     fill: modeOf(r).color
-  }))), runs[0].questions > 0 && /*#__PURE__*/React.createElement(DirectLabel, {
+  }))), runs[0][field] > 0 && /*#__PURE__*/React.createElement(DirectLabel, {
     x: L,
-    y: y(runs[0].questions) - 9
-  }, "asked you ", runs[0].questions, " things"), firstQuiet > 0 && /*#__PURE__*/React.createElement(DirectLabel, {
+    y: y(runs[0][field]) - 9
+  }, verb, " ", runs[0][field], " times"), firstQuiet > 0 && /*#__PURE__*/React.createElement(DirectLabel, {
     x: xf(firstQuiet) + 8,
     y: bot - 17
-  }, "never had to ask again"), /*#__PURE__*/React.createElement(Crosshair, {
+  }, field === "questions" ? "never had to ask again" : "stopped needing you"), /*#__PURE__*/React.createElement(Crosshair, {
     i: hover,
     n: n,
     height: 116
@@ -923,6 +925,12 @@ function Charts({
   const n = runs.length;
   const cost = COST_LABEL[costBasis];
   const costKey = costBasis === 'tool_calls' ? 'tool_calls' : costBasis === 'tokens' ? 'tokens' : null;
+  // A line every point of which is zero is not a measurement, it is an empty
+  // panel with a title on it. Questions first, because that is the claim; the
+  // human-effort line stands in when the ask path never fired, and if neither
+  // has a number the row is not drawn at all.
+  const effortField = runs.some(r => r.questions > 0) ? 'questions'
+    : runs.some(r => r.touches > 0) ? 'touches' : null;
   useLayoutEffect(() => {
     const tip = tipRef.current,
       host = hostRef.current;
@@ -968,28 +976,18 @@ function Charts({
     runs: runs,
     costKey: costKey,
     hover: hover
-  })) : /*#__PURE__*/React.createElement("div", {
-    className: "chart-row"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "eyebrow"
-  }, "It costs less ", /*#__PURE__*/React.createElement("span", {
-    className: "read"
-  }, "not measured yet")), /*#__PURE__*/React.createElement("p", {
-    style: {
-      margin: '10px 0 14px',
-      fontSize: '13px',
-      color: 'var(--ink-2)'
-    }
-  }, "The orchestrator does not report token usage to us yet, so there is nothing honest to draw here. The two lines below do not depend on it.")), /*#__PURE__*/React.createElement("div", {
+  })) : null, effortField ? /*#__PURE__*/React.createElement("div", {
     className: "chart-row"
   }, /*#__PURE__*/React.createElement("div", {
     className: "eyebrow"
   }, "It needs you less ", /*#__PURE__*/React.createElement("span", {
     className: "read"
-  }, "questions it had to ask you")), /*#__PURE__*/React.createElement(QuestionsPlot, {
+  }, effortField === 'questions' ? "questions it had to ask you" : "times you had to step in")), /*#__PURE__*/React.createElement(QuestionsPlot, {
     runs: runs,
-    hover: hover
-  })), /*#__PURE__*/React.createElement("div", {
+    hover: hover,
+    field: effortField,
+    verb: effortField === 'questions' ? 'asked you' : 'needed you'
+  })) : null, /*#__PURE__*/React.createElement("div", {
     className: "chart-row"
   }, /*#__PURE__*/React.createElement("div", {
     className: "eyebrow"
@@ -1055,29 +1053,43 @@ function Stat({
 function Stats({
   stats,
   costBasis,
-  firstDay
+  firstDay,
+  memory
 }) {
   const cost = COST_LABEL[costBasis];
+  // A card is worth the space only if the number on it was measured. Cost is
+  // dropped whole when the orchestrator reported nothing, and "questions it
+  // asked" when the ask path never fired — replaced by two counts the runs
+  // table does carry, so the row reads as evidence rather than as blanks.
+  const memoryDays = memory.replayed, totalDays = memory.days;
   return /*#__PURE__*/React.createElement("section", {
     className: "stats",
     "aria-label": "Latest day against the first"
-  }, /*#__PURE__*/React.createElement(Stat, {
+  }, cost ? /*#__PURE__*/React.createElement(Stat, {
     id: "s-tokens",
-    label: cost ? cost.card : 'Cost today',
-    value: cost ? fmt(stats.cost.value) : '—'
-  }, cost && stats.cost.drop_pct != null ? /*#__PURE__*/React.createElement(Fragment, null, /*#__PURE__*/React.createElement("b", null, stats.cost.drop_pct, "% cheaper"), " than day ", firstDay) : 'Not measured yet'), /*#__PURE__*/React.createElement(Stat, {
+    label: cost.card,
+    value: fmt(stats.cost.value)
+  }, stats.cost.drop_pct != null ? /*#__PURE__*/React.createElement(Fragment, null, /*#__PURE__*/React.createElement("b", null, stats.cost.drop_pct, "% cheaper"), " than day ", firstDay) : 'Not measured yet') : /*#__PURE__*/React.createElement(Stat, {
+    id: "s-memory",
+    label: "Worked from memory",
+    value: pct(memory.ratio)
+  }, "Of what it did on day ", stats.day, ", it had done before"), stats.questions.value > 0 || stats.questions.first > 0 ? /*#__PURE__*/React.createElement(Stat, {
     id: "s-questions",
     label: "Questions it asked",
     value: fmt(stats.questions.value)
-  }, "It asked you ", /*#__PURE__*/React.createElement("b", null, fmt(stats.questions.first)), " on day ", stats.questions.first_day ?? firstDay), /*#__PURE__*/React.createElement(Stat, {
+  }, "It asked you ", /*#__PURE__*/React.createElement("b", null, fmt(stats.questions.first)), " on day ", stats.questions.first_day ?? firstDay) : /*#__PURE__*/React.createElement(Stat, {
+    id: "s-days",
+    label: "Days it ran alone",
+    value: fmt(memoryDays)
+  }, "Of ", /*#__PURE__*/React.createElement("b", null, fmt(totalDays)), " days, it needed nothing new"), /*#__PURE__*/React.createElement(Stat, {
     id: "s-acc",
     label: "Guessed your choice",
     value: pct(stats.accuracy.value)
   }, stats.accuracy.first == null ? 'No resolved predictions yet' : /*#__PURE__*/React.createElement(Fragment, null, "On day ", stats.accuracy.day, ", the last day you answered. It was right ", /*#__PURE__*/React.createElement("b", null, pct(stats.accuracy.first)), " on day ", stats.accuracy.first_day)), /*#__PURE__*/React.createElement(Stat, {
     id: "s-touches",
-    label: "Times you stepped in",
-    value: stats.touches.measured ? fmt(stats.touches.value) : '—'
-  }, stats.touches.measured ? /*#__PURE__*/React.createElement(Fragment, null, "Down from ", /*#__PURE__*/React.createElement("b", null, fmt(stats.touches.first)), " on day ", stats.touches.first_day ?? firstDay) : /*#__PURE__*/React.createElement(Fragment, null, "Nobody answered on day ", stats.touches.day, "; it was ", /*#__PURE__*/React.createElement("b", null, fmt(stats.touches.first)), " on day ", stats.touches.first_day ?? firstDay)));
+    label: stats.touches.measured ? "Times you stepped in" : "Days with no input from you",
+    value: stats.touches.measured ? fmt(stats.touches.value) : fmt(memory.quiet)
+  }, stats.touches.measured ? /*#__PURE__*/React.createElement(Fragment, null, "Down from ", /*#__PURE__*/React.createElement("b", null, fmt(stats.touches.first)), " on day ", stats.touches.first_day ?? firstDay) : /*#__PURE__*/React.createElement(Fragment, null, "It needed you ", /*#__PURE__*/React.createElement("b", null, fmt(stats.touches.first)), " times on day ", stats.touches.first_day ?? firstDay, ", none since day ", memory.lastTouchDay)));
 }
 function Legend() {
   return /*#__PURE__*/React.createElement("div", {
@@ -1270,7 +1282,14 @@ function App() {
   }), /*#__PURE__*/React.createElement(Stats, {
     stats: doc.stats,
     costBasis: doc.cost_basis,
-    firstDay: firstDay
+    firstDay: firstDay,
+    memory: {
+      quiet: [...doc.runs].reverse().findIndex(r => r.touches > 0),
+      lastTouchDay: (doc.runs.filter(r => r.touches > 0).slice(-1)[0] || {}).day,
+      days: doc.runs.length,
+      replayed: doc.runs.filter(r => r.mode === 'full_replay').length,
+      ratio: doc.runs.length ? doc.runs[doc.runs.length - 1].replay_ratio : null
+    }
   }), /*#__PURE__*/React.createElement(TrendPanel, {
     doc: doc
   }), /*#__PURE__*/React.createElement("div", {

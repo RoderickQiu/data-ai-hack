@@ -163,18 +163,23 @@ class HonestyTest(unittest.TestCase):
              "tokens_in": 3000, "tokens_out": 500},
             {"started_at": "2", "day": 2, "run_id": "r2", "shown": 5,
              "tokens_in": 0, "tokens_out": 0},          # the poll found nothing
+            {"started_at": "3", "day": 3, "run_id": "r3", "shown": 5,
+             "tokens_in": 2000, "tokens_out": 400},
         ]
         points = roll_up(rows, {})
         self.assertEqual(points[0]["tokens"], 3500)
         self.assertIsNone(points[1]["tokens"],
                           "an uncounted day is unmeasured, not zero-cost")
+        self.assertEqual(points[2]["tokens"], 2400)
         self.assertEqual(cost_basis(points), "tokens")
 
     def test_cost_basis_says_unavailable_rather_than_drawing_zero(self):
         points = [{"tokens": 0, "tool_calls": 0}, {"tokens": 0, "tool_calls": 0}]
         self.assertEqual(cost_basis(points), "unavailable")
-        self.assertEqual(cost_basis([{"tokens": 0, "tool_calls": 12}]), "tool_calls")
-        self.assertEqual(cost_basis([{"tokens": 900, "tool_calls": 12}]), "tokens")
+        self.assertEqual(cost_basis([{"tokens": 0, "tool_calls": 12}] * 2), "tool_calls")
+        self.assertEqual(cost_basis([{"tokens": 900, "tool_calls": 12}] * 2), "tokens")
+        # One day with a number and the rest without is a spike, not a line.
+        self.assertEqual(cost_basis([{"tokens": 900}, {"tokens": None}]), "unavailable")
 
     def test_headline_keeps_its_shape_with_nothing_to_report(self):
         stats = headline([], "unavailable")
