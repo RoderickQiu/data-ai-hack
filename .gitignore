@@ -16,3 +16,9 @@ dashboard/data.json
 
 # .pipe files are committed with ${VAR} placeholders, never real keys —
 # see rocketride/pipelines.py write_pipe_files(redact=True).
+
+# Any file that carries credentials, not just the one named .env.
+# A env file shared over chat lands here as e.g. DOC-20260911-WA0010.env,
+# which the bare `.env` rule does not match.
+*.env
+.env.backup*
